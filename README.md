@@ -6,7 +6,7 @@
 
 面向 KWRT/OpenWrt x86_64 的 OpenRung CLI + LuCI 管理包。
 
-> **许可说明：** 当前仓库尚未包含 LICENSE 文件。仓库公开可见不等于已授予他人使用、修改和分发代码的开源许可。请在确定许可证并添加 LICENSE 文件后，再将项目标记为正式开源项目。
+> **许可证：** 本项目自编写的代码采用 **GNU GPL-3.0-or-later** 发布。项目集成的 OpenRung 客户端及其第三方组件仍须遵守各自上游许可证与版权声明；请同时查看 [LICENSE](./LICENSE) 和 [OpenRung 上游许可证](https://github.com/openrung/openrung/blob/main/LICENSE)。
 
 ## 当前实现
 
@@ -83,7 +83,7 @@ logread -e openrung | tail -50
   <img src="https://img.shields.io/badge/COMMUNITY-POWERED-7C3AED?style=for-the-badge&logo=opensourceinitiative&logoColor=white&labelColor=111111" alt="Community Powered" />
 </a>
 <a href="https://github.com/mengxianbo/openwrt-openrung">
-  <img src="https://img.shields.io/badge/LICENSE-PENDING-FF6D00?style=for-the-badge&logo=creativecommons&logoColor=white&labelColor=111111" alt="License Pending" />
+  <img src="https://img.shields.io/badge/LICENSE-GPL--3.0--or--later-00C853?style=for-the-badge&logo=gnu&logoColor=white&labelColor=111111" alt="License Pending" />
 </a>
 
 **OPENWRT × OPENRUNG — BUILT FOR THE COMMUNITY**
