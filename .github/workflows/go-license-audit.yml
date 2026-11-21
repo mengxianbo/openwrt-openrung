@@ -68,7 +68,6 @@ jobs:
             COMMIT="$(git -C upstream rev-parse FETCH_HEAD)"
             echo "UPSTREAM_COMMIT=$COMMIT" >> "$GITHUB_ENV"
           fi
-          echo "Auditing exact upstream commit: $UPSTREAM_COMMIT"
 
       - name: Checkout exact OpenRung upstream source
         shell: bash
