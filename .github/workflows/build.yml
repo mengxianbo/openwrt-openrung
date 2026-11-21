@@ -126,14 +126,17 @@ jobs:
 
           # Fill only distributor-specific placeholders in the packaged copy.
           # The exact upstream source archive below remains byte-for-byte upstream.
-          sed -i \
-            's#<add contact / repo issues URL>#https://github.com/mengxianbo/openwrt-openrung/issues#g; s#<add public repo URL>#https://github.com/openrung/openrung#g' \
-            work/client/usr/share/openrung/THIRD_PARTY_NOTICES.md
-          if grep -Eq '<add contact / repo issues URL>|<add public repo URL>' \
-            work/client/usr/share/openrung/THIRD_PARTY_NOTICES.md; then
-            echo "Unresolved distributor placeholders remain in third-party notices" >&2
-            exit 1
-          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          notice = Path("work/client/usr/share/openrung/THIRD_PARTY_NOTICES.md")
+          content = notice.read_text(encoding="utf-8")
+          content = re.sub(r"<add contact /\\s*repo issues URL>", "https://github.com/mengxianbo/openwrt-openrung/issues", content)
+          content = content.replace("<add public repo URL>", "https://github.com/openrung/openrung")
+          if "<add " in content:
+              raise SystemExit("Unresolved distributor placeholder remains in " + str(notice))
+          notice.write_text(content, encoding="utf-8")
+          PY
           install -m 0644 DISTRIBUTION-NOTICE-ADDENDUM.md \
             work/client/usr/share/openrung/DISTRIBUTION-NOTICE-ADDENDUM.md
 
