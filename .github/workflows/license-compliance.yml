@@ -5,6 +5,11 @@ on:
     workflows: ["Build OpenRung OpenWrt IPK"]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: "Optional existing successful Build OpenRung OpenWrt IPK run ID; checks that artifact without rebuilding"
+        required: false
+        type: string
 
 permissions:
   actions: read
@@ -16,21 +21,21 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Download IPK and source artifacts from the exact build
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || inputs.build_run_id != ''
         uses: actions/download-artifact@v4
         with:
           name: openrung-openwrt-ipk
           path: artifacts
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.build_run_id }}
 
       - name: Checkout repository for manual checks
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.build_run_id == ''
         uses: actions/checkout@v4
 
       - name: Verify IPK notices, source metadata, and exact source archives
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || inputs.build_run_id != ''
         shell: bash
         run: |
           set -euo pipefail
@@ -132,7 +137,7 @@ jobs:
           echo "UPSTREAM_COMMIT=$(cat upstream-commit.txt)" >> "$GITHUB_ENV"
 
       - name: Set Go for dependency source reconstruction
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || inputs.build_run_id != ''
         uses: actions/setup-go@v5
         with:
           go-version: "1.25.5"
@@ -195,7 +200,7 @@ jobs:
           sha256sum corresponding-artifact/*.tar.gz > corresponding-artifact/CORRESPONDING-SOURCE-SHA256SUMS
 
       - name: Upload corresponding-source bundle as workflow artifact
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || inputs.build_run_id != ''
         uses: actions/upload-artifact@v4
         with:
           name: openrung-corresponding-source
@@ -217,7 +222,7 @@ jobs:
             "corresponding-artifact/CORRESPONDING-SOURCE-SHA256SUMS" --clobber
 
       - name: Verify repository license declarations (manual run)
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.build_run_id == ''
         shell: bash
         run: |
           set -euo pipefail
