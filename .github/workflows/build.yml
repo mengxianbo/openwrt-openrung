@@ -68,6 +68,17 @@ jobs:
           file ../openrung-client
           test -s ../openrung-client
 
+          # Build a small helper that fetches and verifies the signed relay directory.
+          mkdir -p cmd/openwrt-relays
+          cp ../package/openrung-client/openrung-relays.go cmd/openwrt-relays/main.go
+          go build \
+            -trimpath \
+            -ldflags='-s -w' \
+            -o ../openrung-relays \
+            ./cmd/openwrt-relays
+          file ../openrung-relays
+          test -s ../openrung-relays
+
       - name: Assemble OpenWrt IPK packages
         run: |
           set -eux
@@ -83,6 +94,9 @@ jobs:
 
           install -m 0755 openrung-client \
             work/client/usr/libexec/openrung-client.bin
+
+          install -m 0755 openrung-relays \
+            work/client/usr/bin/openrung-relays
 
           install -m 0755 \
             package/openrung-client/openrung-client-wrapper \
