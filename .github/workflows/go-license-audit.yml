@@ -1,0 +1,160 @@
+name: OpenRung Go Dependency License Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: "Exact OpenRung upstream commit/ref to audit (defaults to historical #24)"
+        required: false
+        type: string
+        default: "5cba4f0b9da642dcc9cc1904f861eb1d59c23a04"
+  workflow_run:
+    workflows: ["Build OpenRung OpenWrt IPK"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  audit:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout packaging repository
+        uses: actions/checkout@v4
+
+      - name: Download successful build artifact to identify exact upstream revision
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: openrung-openwrt-ipk
+          path: artifacts/ipk
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Resolve exact upstream commit
+        shell: bash
+        env:
+          INPUT_REF: ${{ inputs.upstream_ref }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_run" ]; then
+            python3 - <<'PY' >> "$GITHUB_ENV"
+          import io, pathlib, re, tarfile
+          found = set()
+          for ipk in pathlib.Path("artifacts/ipk").rglob("*.ipk"):
+              with tarfile.open(ipk, "r:gz") as outer:
+                  blob = outer.extractfile("./data.tar.gz")
+                  if blob is None:
+                      continue
+                  with tarfile.open(fileobj=io.BytesIO(blob.read()), mode="r:gz") as data:
+                      for member in data.getmembers():
+                          if member.isfile() and member.name.endswith("/SOURCE-INFO.txt"):
+                              raw = data.extractfile(member).read().decode("utf-8", "replace")
+                              match = re.search(r"Exact upstream source commit:\\s*([0-9a-f]{40})", raw)
+                              if match:
+                                  found.add(match.group(1))
+          if len(found) != 1:
+              raise SystemExit(f"Expected exactly one upstream commit in build IPKs; found: {sorted(found)}")
+          print("UPSTREAM_COMMIT=" + next(iter(found)))
+          PY
+          else
+            REF="${INPUT_REF:-5cba4f0b9da642dcc9cc1904f861eb1d59c23a04}"
+            git init upstream
+            git -C upstream remote add origin https://github.com/openrung/openrung.git
+            git -C upstream fetch --depth 1 origin "$REF"
+            COMMIT="$(git -C upstream rev-parse FETCH_HEAD)"
+            echo "UPSTREAM_COMMIT=$COMMIT" >> "$GITHUB_ENV"
+          fi
+          echo "Auditing exact upstream commit: $UPSTREAM_COMMIT"
+
+      - name: Checkout exact OpenRung upstream source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -d upstream/.git ]; then
+            git init upstream
+            git -C upstream remote add origin https://github.com/openrung/openrung.git
+          fi
+          git -C upstream fetch --depth 1 origin "$UPSTREAM_COMMIT"
+          git -C upstream checkout --detach "$UPSTREAM_COMMIT"
+          test "$(git -C upstream rev-parse HEAD)" = "$UPSTREAM_COMMIT"
+          test -s upstream/go.mod
+          test -s upstream/go.sum
+          test -s upstream/THIRD_PARTY_NOTICES.md
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.5"
+          cache: false
+
+      - name: Install pinned go-licenses
+        run: go install github.com/google/go-licenses/v2@v2.0.1
+
+      - name: Audit exact Linux amd64 client dependency graph
+        working-directory: upstream
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+          GOFLAGS: "-tags=with_utls,with_external_windivert"
+        run: |
+          set -euo pipefail
+          mkdir -p ../license-audit
+          go version | tee ../license-audit/go-version.txt
+          printf '%s\\n' "$UPSTREAM_COMMIT" > ../license-audit/upstream-commit.txt
+          go list -mod=readonly -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./cmd/client |
+            sed '/^$/d' | sort -u > ../license-audit/compiled-go-packages.txt
+          go list -mod=readonly -m all > ../license-audit/go-module-graph.txt
+          go-licenses report ./cmd/client > ../license-audit/go-licenses.csv 2> ../license-audit/go-licenses-report.log
+          test -s ../license-audit/go-licenses.csv
+          go-licenses check --disallowed_types=forbidden,restricted,unknown ./cmd/client
+          go-licenses save ./cmd/client --save_path=../license-audit/license-files
+          python3 - <<'PY'
+          import csv, pathlib
+          path = pathlib.Path("../license-audit/go-licenses.csv")
+          rows = list(csv.reader(path.open(encoding="utf-8", newline="")))
+          if not rows:
+              raise SystemExit("FAIL: go-licenses produced an empty report")
+          unknown = [row for row in rows if row and row[-1].strip().lower() == "unknown"]
+          if unknown:
+              raise SystemExit(f"FAIL: unknown license entries remain: {len(unknown)}")
+          print(f"PASS: {len(rows)} dependency/license report rows; no Unknown license labels.")
+          PY
+
+      - name: Write audit scope and limitations
+        if: always()
+        run: |
+          mkdir -p license-audit
+          cat > license-audit/README.txt <<EOF
+          OpenRung Linux amd64 client dependency license audit
+          Upstream commit: ${UPSTREAM_COMMIT:-unresolved}
+          Build target: ./cmd/client
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0
+          Build tags: with_utls,with_external_windivert
+          Tool: github.com/google/go-licenses/v2 v2.0.1
+
+          go-licenses.csv reports dependency/license classifications.
+          compiled-go-packages.txt lists non-standard Go packages selected by
+          the exact target and build tags.
+          go-module-graph.txt records the module graph, which is broader than
+          the set of packages actually linked into this Linux client.
+          license-files/ contains collected license texts/notices.
+
+          This automated scan does not replace human review of copyright,
+          NOTICE, patent, trademark, additional terms, non-Go/native code,
+          generated assets, or any classifier warnings. Any such item must
+          be reviewed before claiming full compliance.
+          EOF
+
+      - name: Upload dependency audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openrung-go-license-audit-${{ github.run_id }}
+          path: license-audit/
+          if-no-files-found: warn
+          retention-days: 90
