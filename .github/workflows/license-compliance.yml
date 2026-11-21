@@ -144,8 +144,8 @@ jobs:
           archive_name="openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz"
           mapfile -t source_matches < <(find artifacts -type f -name "$archive_name" -print)
           if [ "${#source_matches[@]}" -ne 1 ]; then
-            printf 'FAIL: expected exactly one %s under artifacts/, found %s\\n' "$archive_name" "${#source_matches[@]}" >&2
-            printf '%s\\n' "${source_matches[@]}" >&2
+            printf 'FAIL: expected exactly one %s under artifacts/, found %s\n' "$archive_name" "${#source_matches[@]}" >&2
+            printf '%s\n' "${source_matches[@]}" >&2
             exit 1
           fi
           source_archive="${source_matches[0]}"
