@@ -5,33 +5,34 @@
 ## 当前实现
 
 - `openrung-client`：从官方 OpenRung 源码编译的 Linux amd64 CLI。
-- `luci-app-openrung`：中文 LuCI CBI 配置页。
+- `luci-app-openrung`：中文 LuCI 配置页，可修改本地代理监听端口，并显示实际监听地址和端口。
 - procd 后台服务：使用 `connect -headless`，开机启动并无限自动重启。
-- **本地代理端口固定为 `127.0.0.1:44025`**：由官方客户端支持的 `OPENRUNG_PROXY_PORT` 环境变量在服务启动时强制指定，不读取随机端口。
-- procd 服务显式设置 `HOME=/root` 和 `XDG_CONFIG_HOME=/root/.config`，避免精简 OpenWrt 服务环境缺少 HOME，导致 Go 客户端无法初始化用户配置目录并立即退出。
-- LuCI 状态同时检查 procd 实例和 44025 TCP 监听，不再用错误的进程命令行匹配来判断运行状态。
+- **本地监听端口可配置**：默认 `127.0.0.1:44025`；在 LuCI 页面修改“本地监听端口”并保存后重启服务生效。
+- procd 显式设置 `HOME=/root` 和 `XDG_CONFIG_HOME=/root/.config`，避免 Go 客户端因精简服务环境缺少 HOME 而初始化失败。
+- LuCI 状态检查实际 TCP 监听地址/端口，并结合 procd 状态区分“正在监听”“进程启动但未监听”“服务未运行”。
 - PassWall 联动：执行 `openrung-client check` 时，若 PassWall 原本正在运行则先暂停，检测结束后自动恢复；原本关闭则保持关闭。
-- 默认只启用无 TUN 的本地代理模式。TUN 当前不启用，因为目标设备没有 `/dev/net/tun`，且运行内核与软件源内核不匹配。
+- 默认使用无 TUN 的本地代理模式。TUN 当前禁用，因为目标设备没有 `/dev/net/tun`。
 
 ## GitHub Actions 构建
 
 1. Actions -> `Build OpenRung OpenWrt IPK` -> Run workflow。
 2. 构建完成后在 Actions 的 Artifacts 下载 `openrung-openwrt-ipk`。
-3. 也会发布到 Release：`openwrt-latest`。
+3. Workflow 也会发布到 Release：`openwrt-latest`。
 
-Workflow 从官方 `openrung/openrung` main 分支拉取源码，使用 Go 1.25.5 编译；正式部署前建议将 `OPENRUNG_REF` 固定到经过验证的 tag 或 commit。
+## LuCI 修改端口
 
-## 安装
+进入 OpenRung 页面，修改“本地监听端口”（1–65535），保存并应用后重启 OpenRung。状态栏会显示实际监听地址和端口。默认端口为 44025。
+
+## 命令行安装与设置
 
 ```sh
 cd /tmp
 wget -O openrung-client.ipk https://github.com/mengxianbo/openwrt-openrung/releases/latest/download/openrung-client_x86_64.ipk
 wget -O luci-app-openrung.ipk https://github.com/mengxianbo/openwrt-openrung/releases/latest/download/luci-app-openrung_all.ipk
 
-opkg install ./openrung-client.ipk
-opkg install ./luci-app-openrung.ipk
+opkg install --force-reinstall ./openrung-client.ipk
+opkg install --force-reinstall ./luci-app-openrung.ipk
 
-# 启用服务并固定代理端口
 uci set openrung.main.enabled='1'
 uci set openrung.main.mode='proxy'
 uci set openrung.main.proxy_port='44025'
@@ -40,26 +41,25 @@ uci commit openrung
 
 /etc/init.d/openrung enable
 /etc/init.d/openrung restart
-sleep 3
+sleep 5
 
 /etc/init.d/openrung status
 ubus call service list '{"name":"openrung"}'
-ss -lntp 2>/dev/null | grep ':44025' || netstat -lnpt 2>/dev/null | grep ':44025'
+ss -lntp 2>/dev/null | grep ':44025' || netstat -lntp 2>/dev/null | grep ':44025'
 logread -e openrung | tail -50
 ```
 
 ## 运行验收
 
-必须同时满足：
-
-1. `ubus call service list '{"name":"openrung"}'` 中 OpenRung 实例为 `running: true`。
-2. `ss -lntp` 或 `netstat -lnpt` 显示 `127.0.0.1:44025` 正在监听。
-3. `/etc/init.d/openrung enabled` 返回成功。
-4. 重启路由器后仍自动启动并监听 44025。
+1. LuCI 状态栏显示实际监听地址及端口。
+2. `ubus call service list '{"name":"openrung"}'` 中 OpenRung 实例为 `running: true`。
+3. `ss -lntp` 或 `netstat -lnpt` 显示配置的端口正在监听。
+4. 修改端口后，旧端口停止监听，新端口开始监听。
+5. 重启路由器后服务自动启动并监听配置端口。
 
 ## 说明
 
-- 端口只绑定 IPv4 回环地址 `127.0.0.1`，不会向 LAN 暴露无认证代理。
-- procd 使用 `respawn 3600 5 0`：短时间反复崩溃也会每隔 5 秒持续重启，不会因默认 5 次重试后永久停止。
-- 如果 44025 已被其他程序占用，OpenRung 会报告端口冲突；请先释放该端口，不会自动换端口。
+- 代理仅绑定 IPv4 回环地址 `127.0.0.1`，不会向 LAN 暴露无认证代理。
+- procd 使用 `respawn 3600 5 0`，无限自动重启。
+- 若端口已被其他程序占用，客户端可能无法监听；请先释放该端口。
 - 节点筛选支持国家代码、Relay ID、Relay Label；全部留空时由官方引擎自动选择。
