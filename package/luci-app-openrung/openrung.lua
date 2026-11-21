@@ -41,12 +41,10 @@ function status.cfgvalue(self, section)
     if not n or n < 1 or n > 65535 then port_value = "44025" end
 
     local service_running = (sys.call("ubus call service list '{\"name\":\"openrung\"}' 2>/dev/null | grep -q '\"running\"[[:space:]]*:[[:space:]]*true'") == 0)
-    local command = "ss -lnt 2>/dev/null | awk -v p=\":"
-        .. port_value .. "$\" '$4 ~ p {print $4}'"
+    local command = "ss -lnt 2>/dev/null | awk '$4 ~ /:" .. port_value .. "$/ {print $4}'"
     local listening_address = sys.exec(command)
     if not listening_address or listening_address == "" then
-        local netstat_command = "netstat -lnt 2>/dev/null | awk -v p=\":"
-            .. port_value .. "$\" '$4 ~ p {print $4}'"
+        local netstat_command = "netstat -lnt 2>/dev/null | awk '$4 ~ /:" .. port_value .. "$/ {print $4}'"
         listening_address = sys.exec(netstat_command)
     end
 
