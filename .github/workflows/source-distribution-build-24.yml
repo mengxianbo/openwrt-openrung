@@ -59,8 +59,18 @@ jobs:
 
           cp upstream-work/repo/LICENSE dist/OPENRUNG-UPSTREAM-LICENSE
           cp upstream-work/repo/THIRD_PARTY_NOTICES.md dist/OPENRUNG-THIRD-PARTY-NOTICES.md
+          sed -i \
+            's#<add contact / repo issues URL>#https://github.com/mengxianbo/openwrt-openrung/issues#g; s#<add public repo URL>#https://github.com/openrung/openrung#g' \
+            dist/OPENRUNG-THIRD-PARTY-NOTICES.md
+          if grep -Eq '<add contact / repo issues URL>|<add public repo URL>' \
+            dist/OPENRUNG-THIRD-PARTY-NOTICES.md; then
+            echo "Unresolved distributor placeholders remain in the distributed notice copy" >&2
+            exit 1
+          fi
+          cp DISTRIBUTION-NOTICE-ADDENDUM.md dist/DISTRIBUTION-NOTICE-ADDENDUM.md
           cp LICENSES.md dist/LICENSES.md
           cp SOURCE-DISTRIBUTION.md dist/SOURCE-DISTRIBUTION.md
+          cp DEPENDENCY-LICENSE-AUDIT.md dist/DEPENDENCY-LICENSE-AUDIT.md
 
           cat > dist/SOURCE-MANIFEST.txt <<EOF
           OpenRung stable Build #24 corresponding source distribution
