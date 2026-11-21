@@ -105,7 +105,7 @@ jobs:
           EOF
 
           cat > build_ipk.py <<'PY'
-          import gzip
+          import subprocess
           import sys
           import tarfile
           import tempfile
@@ -113,44 +113,29 @@ jobs:
 
           def make_tar_gz(source, output, exclude_control=False):
               source = Path(source)
-              with open(output, "wb") as raw:
-                  with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as gz:
-                      with tarfile.open(fileobj=gz, mode="w") as tar:
-                          for path in sorted(source.rglob("*")):
-                              rel = path.relative_to(source)
-                              if exclude_control and rel.parts and rel.parts[0] == "CONTROL":
-                                  continue
-                              tar.add(path, arcname="./" + str(rel), recursive=False)
-
-          def ar_member(name, data):
-              header = (
-                  (name + "/").encode().ljust(16, b" ")
-                  + b"0".ljust(12, b" ")
-                  + b"0".ljust(6, b" ")
-                  + b"0".ljust(6, b" ")
-                  + b"100644".ljust(8, b" ")
-                  + str(len(data)).encode().ljust(10, b" ")
-                  + b"`\n"
-              )
-              return header + data + (b"\n" if len(data) % 2 else b"")
+              with tarfile.open(output, "w:gz", format=tarfile.GNU_FORMAT) as tar:
+                  for path in sorted(source.rglob("*")):
+                      rel = path.relative_to(source)
+                      if exclude_control and rel.parts and rel.parts[0] == "CONTROL":
+                          continue
+                      tar.add(path, arcname="./" + str(rel), recursive=False)
 
           def build(source, output):
               source = Path(source)
-              with tempfile.TemporaryDirectory() as tmp:
-                  tmp = Path(tmp)
-                  control = tmp / "control.tar.gz"
-                  data = tmp / "data.tar.gz"
+              with tempfile.TemporaryDirectory() as tmpdir:
+                  tmp = Path(tmpdir)
+                  make_tar_gz(source / "CONTROL", tmp / "control.tar.gz")
+                  make_tar_gz(source, tmp / "data.tar.gz", exclude_control=True)
+                  (tmp / "debian-binary").write_text("2.0\\n", encoding="ascii")
 
-                  # IPK control archive must contain ./control at its root.
-                  make_tar_gz(source / "CONTROL", control)
-                  # Payload archive contains package files, but not CONTROL/.
-                  make_tar_gz(source, data, exclude_control=True)
-
-                  with open(output, "wb") as f:
-                      f.write(b"!<arch>\n")
-                      f.write(ar_member("debian-binary", b"2.0\n"))
-                      f.write(ar_member("control.tar.gz", control.read_bytes()))
-                      f.write(ar_member("data.tar.gz", data.read_bytes()))
+                  # Use GNU ar rather than hand-writing ar headers. This produces
+                  # the conventional IPK archive format accepted by OpenWrt opkg.
+                  subprocess.run(
+                      ["ar", "cr", str(Path(output).resolve()),
+                       "debian-binary", "control.tar.gz", "data.tar.gz"],
+                      cwd=tmp,
+                      check=True,
+                  )
 
           build(sys.argv[1], sys.argv[2])
           PY
