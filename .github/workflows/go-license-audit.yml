@@ -61,8 +61,7 @@ jobs:
           print("UPSTREAM_COMMIT=" + next(iter(found)))
           PY
           else
-            REF="$(printf '%s' "${INPUT_REF:-5cba4f0b9da642dcc9cc1904f861eb1d59c23a04}" | xargs)"
-test -n "$REF"
+            REF="${INPUT_REF:-5cba4f0b9da642dcc9cc1904f861eb1d59c23a04}"
             git init upstream
             git -C upstream remote add origin https://github.com/openrung/openrung.git
             git -C upstream fetch --depth 1 origin "$REF"
