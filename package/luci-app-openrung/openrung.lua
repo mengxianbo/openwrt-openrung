@@ -22,6 +22,13 @@ local rid = s:option(Value, "relay_id", translate("指定 Relay ID"))
 rid.placeholder = "relay_xxxxx"
 rid.description = translate("填写后优先按精确 Relay ID 连接；留空则不限制 ID。")
 
+local proxy_port = s:option(Value, "proxy_port", translate("本地监听端口"))
+proxy_port.datatype = "port"
+proxy_port.default = "44025"
+proxy_port.placeholder = "44025"
+proxy_port.rmempty = false
+proxy_port.description = translate("OpenRung 本地 HTTP / SOCKS5 混合代理监听端口，仅绑定本机回环地址。默认 44025。")
+
 local label = s:option(Value, "relay_label", translate("节点标签"))
 label.placeholder = "Germany"
 label.description = translate("可选筛选条件；建议 Relay ID、国家代码、标签三者只设置一个。")

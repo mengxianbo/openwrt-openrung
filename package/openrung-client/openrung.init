@@ -18,8 +18,21 @@ start_service() {
     config_get relay_id main relay_id
     config_get relay_country main relay_country
     config_get relay_label main relay_label
+    config_get proxy_port main proxy_port '44025'
+
+    case "$proxy_port" in
+        ''|*[!0-9]*)
+            logger -t openrung "Invalid local proxy port: $proxy_port"
+            return 1
+            ;;
+    esac
+    [ "$proxy_port" -ge 1 ] && [ "$proxy_port" -le 65535 ] || {
+        logger -t openrung "Local proxy port must be between 1 and 65535"
+        return 1
+    }
 
     procd_open_instance
+    procd_set_param env OPENRUNG_PROXY_PORT="$proxy_port"
     procd_set_param command /usr/bin/openrung-client connect -headless
     [ -n "$relay_id" ] && procd_append_param command -relay-id "$relay_id"
     [ -n "$relay_country" ] && procd_append_param command -relay-country "$relay_country"
