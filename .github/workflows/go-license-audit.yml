@@ -14,13 +14,18 @@ on:
     workflows: ["Build OpenRung OpenWrt IPK"]
     types: [completed]
 
+  pull_request:
+    paths:
+      - ".github/workflows/go-license-audit.yml"
+      - "LICENSE-AUDIT/**"
+
 permissions:
   actions: read
   contents: read
 
 jobs:
   audit:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
 
     steps:
@@ -212,6 +217,8 @@ jobs:
 
           cp THIRD_PARTY_NOTICES.md \
             ../license-audit/OPENRUNG-THIRD-PARTY-NOTICES.md
+          cp ../LICENSE-AUDIT/fswatch-v0.1.2-LICENSE.txt \
+            ../license-audit/fswatch-v0.1.2-LICENSE.txt
 
           python3 - <<'PY'
           import csv
@@ -287,16 +294,68 @@ jobs:
                           f"FAIL: module missing from exact Go module graph: {module}"
                       )
 
-                  if normalized not in notices:
+                  # The upstream notice writes the SagerNet family as
+                  # github.com/sagernet/sing followed by abbreviated paths
+                  # such as "…/fswatch", rather than repeating the full
+                  # module path for every member.
+                  short_name = normalized.rsplit("/", 1)[-1]
+                  documented = (
+                      normalized in notices
+                      or f"…/{short_name}" in notices
+                      or f".../{short_name}" in notices
+                  )
+
+                  if not documented:
                       raise SystemExit(
                           f"FAIL: module not documented in upstream notices: {module}"
+                      )
+
+                  if module == "github.com/sagernet/fswatch":
+                      expected_version = "v0.1.2"
+                      actual_version = graph_versions[normalized]
+                      if actual_version != expected_version:
+                          raise SystemExit(
+                              "FAIL: fswatch version mismatch: "
+                              f"expected {expected_version}, got {actual_version}"
+                          )
+
+                      fswatch_license = pathlib.Path(
+                          "../LICENSE-AUDIT/fswatch-v0.1.2-LICENSE.txt"
+                      ).read_text(encoding="utf-8")
+
+                      fswatch_lower = fswatch_license.lower()
+                      required_license_markers = [
+                          "copyright (c) 2022 by nekohasekai",
+                          "gnu general public license",
+                          "either version 3",
+                          "any later version",
+                      ]
+                      missing = [
+                          marker for marker in required_license_markers
+                          if marker not in fswatch_lower
+                      ]
+                      if missing:
+                          raise SystemExit(
+                              "FAIL: fswatch upstream license evidence is "
+                              f"incomplete: {missing}"
+                          )
+
+                      evidence = (
+                          "Official SagerNet/fswatch v0.1.2 LICENSE; "
+                          "local verified copy at "
+                          "LICENSE-AUDIT/fswatch-v0.1.2-LICENSE.txt"
+                      )
+                  else:
+                      evidence = (
+                          "Upstream THIRD_PARTY_NOTICES.md section 1 "
+                          "and upstream LICENSE"
                       )
 
                   writer.writerow([
                       module,
                       graph_versions[normalized],
                       "GPL-3.0-or-later",
-                      "Upstream THIRD_PARTY_NOTICES.md section 1 and LICENSE"
+                      evidence
                   ])
 
           rows = list(
@@ -357,6 +416,10 @@ jobs:
 
           OPENRUNG-THIRD-PARTY-NOTICES.md:
           Exact upstream third-party notices.
+
+          fswatch-v0.1.2-LICENSE.txt:
+          Exact fswatch v0.1.2 upstream GPL-3.0-or-later license text,
+          copied into this repository as supplemental audit evidence.
 
           compiled-go-packages.txt:
           Non-standard Go packages selected by the target and build tags.
