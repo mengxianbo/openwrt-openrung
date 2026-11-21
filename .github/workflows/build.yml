@@ -72,7 +72,7 @@ jobs:
         run: |
           set -eux
 
-          VERSION="0.1.0+${OPENRUNG_COMMIT:0:8}"
+          VERSION="0.1.0+${OPENRUNG_COMMIT:0:8}.${GITHUB_SHA:0:8}"
 
           mkdir -p out \
             work/client/usr/bin \
@@ -95,6 +95,11 @@ jobs:
           install -m 0755 \
             package/openrung-client/openrung.init \
             work/client/etc/init.d/openrung
+
+          # opkg runs this after installation to register the init script.
+          install -m 0755 \
+            package/openrung-client/openrung.postinst \
+            work/client/CONTROL/postinst
 
           mkdir -p work/client/usr/share/openrung
 
@@ -239,6 +244,7 @@ jobs:
 
           sh -n package/openrung-client/openrung-client-wrapper
           sh -n package/openrung-client/openrung.init
+          sh -n package/openrung-client/openrung.postinst
 
           for pkg in \
             openrung-client_${PACKAGE_VERSION}_x86_64.ipk \
