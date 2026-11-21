@@ -59,14 +59,17 @@ jobs:
 
           cp upstream-work/repo/LICENSE dist/OPENRUNG-UPSTREAM-LICENSE
           cp upstream-work/repo/THIRD_PARTY_NOTICES.md dist/OPENRUNG-THIRD-PARTY-NOTICES.md
-          sed -i \
-            's#<add contact / repo issues URL>#https://github.com/mengxianbo/openwrt-openrung/issues#g; s#<add public repo URL>#https://github.com/openrung/openrung#g' \
-            dist/OPENRUNG-THIRD-PARTY-NOTICES.md
-          if grep -Eq '<add contact / repo issues URL>|<add public repo URL>' \
-            dist/OPENRUNG-THIRD-PARTY-NOTICES.md; then
-            echo "Unresolved distributor placeholders remain in the distributed notice copy" >&2
-            exit 1
-          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          notice = Path("dist/OPENRUNG-THIRD-PARTY-NOTICES.md")
+          content = notice.read_text(encoding="utf-8")
+          content = re.sub(r"<add contact /\\s*repo issues URL>", "https://github.com/mengxianbo/openwrt-openrung/issues", content)
+          content = content.replace("<add public repo URL>", "https://github.com/openrung/openrung")
+          if "<add " in content:
+              raise SystemExit("Unresolved distributor placeholder remains in " + str(notice))
+          notice.write_text(content, encoding="utf-8")
+          PY
           cp DISTRIBUTION-NOTICE-ADDENDUM.md dist/DISTRIBUTION-NOTICE-ADDENDUM.md
           cp LICENSES.md dist/LICENSES.md
           cp SOURCE-DISTRIBUTION.md dist/SOURCE-DISTRIBUTION.md
