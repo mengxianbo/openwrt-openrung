@@ -69,3 +69,15 @@ logread -e openrung | tail -50
 - procd 使用 `respawn 3600 5 0`，无限自动重启。
 - 若端口已被其他程序占用，客户端可能无法监听；请先释放该端口。
 - 节点筛选支持国家代码、Relay ID、Relay Label；全部留空时由官方引擎自动选择。
+
+---
+
+<div align="center">
+
+**OpenRung for OpenWrt**
+
+[![Open Source](https://img.shields.io/badge/OPEN%20SOURCE-PUBLIC-blue?style=for-the-badge&logo=github)](https://github.com/mengxianbo/openwrt-openrung)
+
+[GitHub Repository](https://github.com/mengxianbo/openwrt-openrung)
+
+</div>
