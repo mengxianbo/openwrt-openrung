@@ -52,7 +52,7 @@ jobs:
           LICENSE_COUNT="$(find vendor -type f \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) | wc -l)"
           test "${MODULE_COUNT}" -gt 0
           test "${LICENSE_COUNT}" -gt 0
-          go list -mod=vendor ./... >/dev/null
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go list -mod=vendor -tags='with_utls,with_external_windivert' ./cmd/client >/dev/null
           cd ../..
 
           tar --exclude=.git -czf "dist/openrung-upstream-source-${UPSTREAM_COMMIT}-with-vendor.tar.gz" -C upstream-work/repo .

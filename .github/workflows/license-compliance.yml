@@ -2,6 +2,15 @@ name: OpenRung License Compliance
 
 on:
   workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: "Successful Build OpenRung OpenWrt IPK workflow run ID to audit"
+        required: true
+        type: string
+  workflow_run:
+    workflows: ["Build OpenRung OpenWrt IPK"]
+    types: [completed]
+    branches: [main]
 
 permissions:
   actions: read
@@ -9,25 +18,25 @@ permissions:
 
 jobs:
   verify-distribution:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout repository for manual checks
-        if: github.event_name == 'workflow_dispatch'
+      - name: Checkout repository
+        if: success()
         uses: actions/checkout@v4
 
       - name: Download IPK and source artifacts from the exact build
-        if: github.event_name == 'workflow_dispatch'
+        if: success()
         uses: actions/download-artifact@v4
         with:
           name: openrung-openwrt-ipk
           path: artifacts
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          run-id: 44908713556
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.build_run_id }}
 
       - name: Verify IPK notices, source metadata, and exact source archives
-        if: github.event_name == 'workflow_dispatch'
+        if: success()
         shell: bash
         run: |
           set -euo pipefail
@@ -129,14 +138,14 @@ jobs:
           echo "UPSTREAM_COMMIT=$(cat upstream-commit.txt)" >> "$GITHUB_ENV"
 
       - name: Set Go for dependency source reconstruction
-        if: github.event_name == 'workflow_dispatch'
+        if: success()
         uses: actions/setup-go@v5
         with:
           go-version: "1.25.5"
           cache: false
 
       - name: Generate exact upstream corresponding-source bundle with vendored Go dependencies
-        if: github.event_name == 'workflow_dispatch'
+        if: success()
         shell: bash
         run: |
           set -euxo pipefail
@@ -172,7 +181,7 @@ jobs:
           LICENSE_FILE_COUNT="$(find vendor -type f \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) | wc -l)"
           test "$MODULE_COUNT" -gt 0
           test "$LICENSE_FILE_COUNT" -gt 0
-          go list -mod=vendor ./... >/dev/null
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go list -mod=vendor -tags='with_utls,with_external_windivert' ./cmd/client >/dev/null
 
           cat > CORRESPONDING-SOURCE-INFO.txt <<EOF
           OpenRung exact corresponding-source bundle
@@ -205,7 +214,7 @@ jobs:
           sha256sum corresponding-artifact/*.tar.gz > "corresponding-artifact/CORRESPONDING-SOURCE-SHA256SUMS-${UPSTREAM_COMMIT}.txt"
           echo "PASS: corresponding-source archive created."
       - name: Upload corresponding-source bundle as workflow artifact
-        if: github.event_name == 'workflow_dispatch'
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: openrung-corresponding-source
@@ -215,31 +224,8 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      - name: Publish corresponding-source bundle alongside the matching IPK release
-        if: github.event_name == 'workflow_run'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          ARCHIVE="openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz"
-          CHECKSUM="CORRESPONDING-SOURCE-SHA256SUMS-${UPSTREAM_COMMIT}.txt"
-          echo "Checking existing Release assets without modifying them..."
-          EXISTING="$(gh release view openwrt-latest --json assets --jq '.assets[].name')"
-          if grep -Fxq "$ARCHIVE" <<< "$EXISTING"; then
-            echo "Refusing to overwrite existing Release asset: $ARCHIVE" >&2
-            exit 1
-          fi
-          if grep -Fxq "$CHECKSUM" <<< "$EXISTING"; then
-            echo "Refusing to overwrite existing Release asset: $CHECKSUM" >&2
-            exit 1
-          fi
-          gh release upload openwrt-latest \
-            "corresponding-artifact/$ARCHIVE" \
-            "corresponding-artifact/$CHECKSUM"
-
-      - name: Verify repository license declarations (manual run)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Verify repository license declarations
+        if: success()
         shell: bash
         run: |
           set -euo pipefail
