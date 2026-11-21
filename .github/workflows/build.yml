@@ -332,6 +332,58 @@ jobs:
 
           echo "All IPK packages verified successfully."
 
+          # Enforce license files and SPDX-style package metadata for future builds.
+          python3 - <<'PY'
+          import io
+          import tarfile
+          from pathlib import Path
+
+          def archive_members(blob):
+              with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as archive:
+                  return {
+                      member.name.removeprefix("./"): archive.extractfile(member).read()
+                      for member in archive.getmembers()
+                      if member.isfile()
+                  }
+
+          def inspect_ipk(path):
+              with tarfile.open(path, "r:gz") as outer:
+                  control_blob = outer.extractfile("./control.tar.gz").read()
+                  data_blob = outer.extractfile("./data.tar.gz").read()
+              return archive_members(control_blob), archive_members(data_blob)
+
+          checks = [
+              (
+                  Path(f"openrung-client_{__import__('os').environ['PACKAGE_VERSION']}_x86_64.ipk"),
+                  "usr/share/openrung/LICENSE",
+                  "openrung-client",
+              ),
+              (
+                  Path(f"luci-app-openrung_{__import__('os').environ['PACKAGE_VERSION']}_all.ipk"),
+                  "usr/share/licenses/luci-app-openrung/LICENSE",
+                  "luci-app-openrung",
+              ),
+          ]
+
+          for package, license_path, package_name in checks:
+              control, data = inspect_ipk(package)
+              metadata = control.get("control", b"").decode("utf-8", "replace")
+              if f"Package: {package_name}" not in metadata:
+                  raise SystemExit(f"FAIL: {package.name}: incorrect package metadata")
+              if "License: GPL-3.0-or-later" not in metadata:
+                  raise SystemExit(f"FAIL: {package.name}: License field missing or incorrect")
+              if license_path not in data or not data[license_path].strip():
+                  raise SystemExit(f"FAIL: {package.name}: embedded LICENSE missing or empty")
+              print(f"PASS: {package.name}: GPL-3.0-or-later metadata and embedded LICENSE verified")
+
+          client = checks[0][0]
+          _, client_data = inspect_ipk(client)
+          notices = client_data.get("usr/share/openrung/THIRD_PARTY_NOTICES.md", b"")
+          if not notices.strip():
+              raise SystemExit("FAIL: openrung-client: third-party notices missing or empty")
+          print("PASS: openrung-client: third-party notices verified")
+          PY
+
       - name: Upload packages as workflow artifact
         uses: actions/upload-artifact@v4
         with:
