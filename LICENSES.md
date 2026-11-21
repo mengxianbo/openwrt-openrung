@@ -25,3 +25,20 @@ The compliance workflow does not automatically replace or upload assets to an ex
 The compliance workflow verifies license files, notices, commit identity, source archives, and the presence of vendored dependency source. It also checks that the client package resolves with the recorded vendored module tree and build tags.
 
 These automated checks are not legal advice and do not replace a human review of each dependency's license, attribution, patent, trademark, or additional-term requirements. A passing workflow means the tested files and source bundle were present and internally matched; it is not a blanket legal certification.
+
+
+## Target-specific Go dependency audit
+
+The OpenWrt Linux amd64 client dependency graph is audited separately by
+`.github/workflows/go-license-audit.yml`. The workflow uses the exact
+upstream commit recorded in a successful IPK's `SOURCE-INFO.txt`, or accepts
+an explicit upstream ref for a manual historical audit. It applies the same
+`./cmd/client` target, `linux/amd64` platform, `CGO_ENABLED=0`, and
+`with_utls,with_external_windivert` build tags as the package build.
+
+The report artifact includes the compiled Go package list, module graph,
+`go-licenses` CSV, collected license files, and tool logs. The workflow
+fails on forbidden, restricted, or unknown classifications. This is a
+screening control, not a substitute for manual review of copyright, NOTICE,
+patent, trademark, additional terms, or non-Go/native components. See
+[DEPENDENCY-LICENSE-AUDIT.md](DEPENDENCY-LICENSE-AUDIT.md).
