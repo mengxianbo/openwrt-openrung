@@ -131,7 +131,7 @@ jobs:
           import re
           notice = Path("work/client/usr/share/openrung/THIRD_PARTY_NOTICES.md")
           content = notice.read_text(encoding="utf-8")
-          content = re.sub(r"<add contact /\\s*repo issues URL>", "https://github.com/mengxianbo/openwrt-openrung/issues", content)
+          content = re.sub(r"<add contact /\s*repo issues URL>", "https://github.com/mengxianbo/openwrt-openrung/issues", content)
           content = content.replace("<add public repo URL>", "https://github.com/openrung/openrung")
           if "<add " in content:
               raise SystemExit("Unresolved distributor placeholder remains in " + str(notice))
