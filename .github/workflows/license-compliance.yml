@@ -144,7 +144,7 @@ jobs:
           cache: false
 
       - name: Generate exact upstream corresponding-source bundle with vendored Go dependencies
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || inputs.build_run_id != ''
         shell: bash
         run: |
           set -euo pipefail
