@@ -14,13 +14,18 @@ on:
     workflows: ["Build OpenRung OpenWrt IPK"]
     types: [completed]
 
+  pull_request:
+    paths:
+      - ".github/workflows/go-license-audit.yml"
+      - "LICENSE-AUDIT/**"
+
 permissions:
   actions: read
   contents: read
 
 jobs:
   audit:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
 
     steps:
