@@ -1,0 +1,15 @@
+#!/bin/sh
+# Register OpenRung for startup after the package is installed.
+# Do not modify the target filesystem when opkg is operating on an image root.
+[ -n "$IPKG_INSTROOT" ] && exit 0
+
+if [ -x /etc/init.d/openrung ]; then
+    /etc/init.d/openrung enable
+
+    # Start immediately only when the user's UCI setting enables the service.
+    if [ "$(uci -q get openrung.main.enabled)" = "1" ]; then
+        /etc/init.d/openrung restart
+    fi
+fi
+
+exit 0
