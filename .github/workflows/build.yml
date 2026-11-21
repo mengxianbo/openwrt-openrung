@@ -97,6 +97,9 @@ jobs:
             package/openrung-client/openrung.config \
             work/client/etc/config/openrung
 
+          # Preserve user settings (enabled flag and custom proxy port) on upgrades.
+          printf '/etc/config/openrung\\n' > work/client/CONTROL/conffiles
+
           install -m 0755 \
             package/openrung-client/openrung.init \
             work/client/etc/init.d/openrung
