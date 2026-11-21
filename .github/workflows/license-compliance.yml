@@ -203,7 +203,7 @@ jobs:
           tar -czf "corresponding-artifact/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz" \
             -C corresponding "openrung-${UPSTREAM_COMMIT}"
           test -s "corresponding-artifact/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz"
-          sha256sum corresponding-artifact/*.tar.gz > corresponding-artifact/CORRESPONDING-SOURCE-SHA256SUMS
+          sha256sum corresponding-artifact/*.tar.gz > "corresponding-artifact/CORRESPONDING-SOURCE-SHA256SUMS-${UPSTREAM_COMMIT}.txt"
           echo "PASS: corresponding-source archive created."
       - name: Upload corresponding-source bundle as workflow artifact
         if: github.event_name == 'workflow_run' || inputs.build_run_id != ''
@@ -212,7 +212,7 @@ jobs:
           name: openrung-corresponding-source
           path: |
             corresponding-artifact/*.tar.gz
-            corresponding-artifact/CORRESPONDING-SOURCE-SHA256SUMS
+            corresponding-artifact/CORRESPONDING-SOURCE-SHA256SUMS-*.txt
           if-no-files-found: error
           retention-days: 90
 
@@ -223,9 +223,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          ARCHIVE="openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz"
+          CHECKSUM="CORRESPONDING-SOURCE-SHA256SUMS-${UPSTREAM_COMMIT}.txt"
+          echo "Checking existing Release assets without modifying them..."
+          EXISTING="$(gh release view openwrt-latest --json assets --jq '.assets[].name')"
+          if grep -Fxq "$ARCHIVE" <<< "$EXISTING"; then
+            echo "Refusing to overwrite existing Release asset: $ARCHIVE" >&2
+            exit 1
+          fi
+          if grep -Fxq "$CHECKSUM" <<< "$EXISTING"; then
+            echo "Refusing to overwrite existing Release asset: $CHECKSUM" >&2
+            exit 1
+          fi
           gh release upload openwrt-latest \
-            "corresponding-artifact/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz" \
-            "corresponding-artifact/CORRESPONDING-SOURCE-SHA256SUMS" --clobber
+            "corresponding-artifact/$ARCHIVE" \
+            "corresponding-artifact/$CHECKSUM"
 
       - name: Verify repository license declarations (manual run)
         if: github.event_name == 'workflow_dispatch' && inputs.build_run_id == ''
