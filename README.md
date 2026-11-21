@@ -74,10 +74,20 @@ logread -e openrung | tail -50
 
 <div align="center">
 
-**OpenRung for OpenWrt**
+# ⚡ OPENRUNG
 
-[![Open Source](https://img.shields.io/badge/OPEN%20SOURCE-PUBLIC-blue?style=for-the-badge&logo=github)](https://github.com/mengxianbo/openwrt-openrung)
+<a href="https://github.com/mengxianbo/openwrt-openrung">
+  <img src="https://img.shields.io/badge/OPEN%20SOURCE-PUBLIC%20REPOSITORY-00C853?style=for-the-badge&logo=github&logoColor=white&labelColor=111111" alt="Public Repository" />
+</a>
+<a href="https://github.com/mengxianbo/openwrt-openrung">
+  <img src="https://img.shields.io/badge/COMMUNITY-POWERED-7C3AED?style=for-the-badge&logo=opensourceinitiative&logoColor=white&labelColor=111111" alt="Community Powered" />
+</a>
+<a href="https://github.com/mengxianbo/openwrt-openrung">
+  <img src="https://img.shields.io/badge/LICENSE-PENDING-FF6D00?style=for-the-badge&logo=creativecommons&logoColor=white&labelColor=111111" alt="License Pending" />
+</a>
 
-[GitHub Repository](https://github.com/mengxianbo/openwrt-openrung)
+**OPENWRT × OPENRUNG — BUILT FOR THE COMMUNITY**
+
+[⭐ Star this project](https://github.com/mengxianbo/openwrt-openrung) · [View Repository](https://github.com/mengxianbo/openwrt-openrung)
 
 </div>
