@@ -73,6 +73,7 @@ jobs:
           cp ../package/openrung-client/openrung-relays.go cmd/openwrt-relays/main.go
           go build \
             -trimpath \
+            -tags 'with_utls,with_external_windivert' \
             -ldflags='-s -w' \
             -o ../openrung-relays \
             ./cmd/openwrt-relays
