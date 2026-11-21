@@ -12,6 +12,10 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     steps:
+      - name: Checkout repository for manual checks
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+
       - name: Download IPK and source artifacts from the exact build
         if: github.event_name == 'workflow_dispatch'
         uses: actions/download-artifact@v4
@@ -21,10 +25,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
           run-id: 44908713556
-
-      - name: Checkout repository for manual checks
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/checkout@v4
 
       - name: Verify IPK notices, source metadata, and exact source archives
         if: github.event_name == 'workflow_dispatch'
@@ -141,7 +141,14 @@ jobs:
         run: |
           set -euxo pipefail
           echo "STEP 1: locate exact upstream archive"
-          source_archive="artifacts/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz"
+          archive_name="openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz"
+          mapfile -t source_matches < <(find artifacts -type f -name "$archive_name" -print)
+          if [ "${#source_matches[@]}" -ne 1 ]; then
+            printf 'FAIL: expected exactly one %s under artifacts/, found %s\\n' "$archive_name" "${#source_matches[@]}" >&2
+            printf '%s\\n' "${source_matches[@]}" >&2
+            exit 1
+          fi
+          source_archive="${source_matches[0]}"
           ls -lh "$source_archive"
           test -s "$source_archive"
 
