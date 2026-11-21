@@ -1,6 +1,12 @@
 # OpenRung for OpenWrt (x86_64)
 
+![Open Source](https://img.shields.io/badge/Open%20Source-Public%20Repository-blue?logo=github)
+![Platform](https://img.shields.io/badge/Platform-OpenWrt%20x86__64-blue)
+![Build](https://img.shields.io/badge/Build-GitHub%20Actions-success)
+
 面向 KWRT/OpenWrt x86_64 的 OpenRung CLI + LuCI 管理包。
+
+> **许可说明：** 当前仓库尚未包含 LICENSE 文件。仓库公开可见不等于已授予他人使用、修改和分发代码的开源许可。请在确定许可证并添加 LICENSE 文件后，再将项目标记为正式开源项目。
 
 ## 当前实现
 
