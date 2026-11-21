@@ -126,7 +126,7 @@ jobs:
                   tmp = Path(tmpdir)
                   make_tar_gz(source / "CONTROL", tmp / "control.tar.gz")
                   make_tar_gz(source, tmp / "data.tar.gz", exclude_control=True)
-                  (tmp / "debian-binary").write_text("2.0\\n", encoding="ascii")
+                  (tmp / "debian-binary").write_text("2.0\n", encoding="ascii")
 
                   # Use GNU ar rather than hand-writing ar headers. This produces
                   # the conventional IPK archive format accepted by OpenWrt opkg.
@@ -158,7 +158,8 @@ jobs:
           for pkg in openrung-client_${PACKAGE_VERSION}_x86_64.ipk luci-app-openrung_${PACKAGE_VERSION}_all.ipk; do
             ar t "$pkg"
             mkdir -p verify
-            (cd verify && ar x "../$pkg" control.tar.gz)
+            (cd verify && ar x "../$pkg" debian-binary control.tar.gz)
+            test "$(cat verify/debian-binary)" = "2.0"
             tar -tzf verify/control.tar.gz
             tar -xOzf verify/control.tar.gz ./control | head
             rm -rf verify
