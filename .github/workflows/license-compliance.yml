@@ -214,7 +214,7 @@ jobs:
           set -euo pipefail
           gh release upload openwrt-latest \
             "corresponding-artifact/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz" \
-            "corresponding-artifact/SHA256SUMS" --clobber
+            "corresponding-artifact/CORRESPONDING-SOURCE-SHA256SUMS" --clobber
 
       - name: Verify repository license declarations (manual run)
         if: github.event_name == 'workflow_dispatch'
