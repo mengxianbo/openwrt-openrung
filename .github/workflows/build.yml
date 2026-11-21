@@ -7,6 +7,7 @@ on:
         description: "OpenRung git ref (tag/branch/commit)"
         required: false
         default: "main"
+
   push:
     paths:
       - ".github/workflows/build.yml"
@@ -19,6 +20,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
+
     steps:
       - name: Checkout packaging repository
         uses: actions/checkout@v4
@@ -26,7 +28,8 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential opkg-utils file
+          sudo apt-get install -y build-essential file python3
+
       - name: Set Go
         uses: actions/setup-go@v5
         with:
@@ -37,9 +40,19 @@ jobs:
         env:
           INPUT_REF: ${{ inputs.openrung_ref }}
         run: |
+          set -eux
+
           REF="${INPUT_REF:-main}"
-          git clone --depth 1 --branch "$REF" https://github.com/openrung/openrung.git upstream
-          echo "OPENRUNG_COMMIT=$(git -C upstream rev-parse HEAD)" >> "$GITHUB_ENV"
+
+          git init upstream
+          git -C upstream remote add origin https://github.com/openrung/openrung.git
+          git -C upstream fetch --depth 1 origin "$REF"
+          git -C upstream checkout --detach FETCH_HEAD
+
+          COMMIT="$(git -C upstream rev-parse HEAD)"
+          echo "OPENRUNG_COMMIT=$COMMIT" >> "$GITHUB_ENV"
+
+          echo "OpenRung commit: $COMMIT"
 
       - name: Build Linux amd64 client
         working-directory: upstream
@@ -48,35 +61,66 @@ jobs:
           GOOS: linux
           GOARCH: amd64
         run: |
+          set -eux
+
           go version
-          go build -trimpath -tags 'with_utls,with_external_windivert' \
-            -ldflags='-s -w' -o ../openrung-client ./cmd/client
+
+          go build \
+            -trimpath \
+            -tags 'with_utls,with_external_windivert' \
+            -ldflags='-s -w' \
+            -o ../openrung-client \
+            ./cmd/client
+
           file ../openrung-client
-          ../openrung-client --version
+          test -s ../openrung-client
 
       - name: Assemble IPK packages
         run: |
           set -eux
+
           VERSION="0.1.0+${OPENRUNG_COMMIT:0:8}"
+
           mkdir -p out
-          mkdir -p work/client/usr/bin work/client/etc/config work/client/etc/init.d
-          install -m 0755 openrung-client work/client/usr/bin/openrung-client
-          cp package/openrung-client/openrung.config work/client/etc/config/openrung
-          install -m 0755 package/openrung-client/openrung.init work/client/etc/init.d/openrung
+          mkdir -p work/client/usr/bin
+          mkdir -p work/client/etc/config
+          mkdir -p work/client/etc/init.d
           mkdir -p work/client/CONTROL
+
+          install -m 0755 openrung-client \
+            work/client/usr/bin/openrung-client
+
+          install -m 0644 \
+            package/openrung-client/openrung.config \
+            work/client/etc/config/openrung
+
+          install -m 0755 \
+            package/openrung-client/openrung.init \
+            work/client/etc/init.d/openrung
+
+          cp upstream/LICENSE work/client/usr/share-openrung-LICENSE 2>/dev/null || true
+          cp upstream/THIRD_PARTY_NOTICES.md work/client/usr/share-openrung-THIRD_PARTY_NOTICES.md 2>/dev/null || true
+
           cat > work/client/CONTROL/control <<EOF
           Package: openrung-client
           Version: ${VERSION}
           Architecture: x86_64
           Maintainer: OpenWrt OpenRung Community
-          Depends: libc
           Description: OpenRung CLI client for OpenWrt x86_64
           EOF
-          opkg-build -o root -g root work/client out
 
-          mkdir -p work/luci/CONTROL work/luci/usr/lib/lua/luci/controller work/luci/usr/lib/lua/luci/model/cbi/openrung
-          install -m 0644 package/luci-app-openrung/controller.lua work/luci/usr/lib/lua/luci/controller/openrung.lua
-          install -m 0644 package/luci-app-openrung/openrung.lua work/luci/usr/lib/lua/luci/model/cbi/openrung/main.lua
+          mkdir -p work/luci/CONTROL
+          mkdir -p work/luci/usr/lib/lua/luci/controller
+          mkdir -p work/luci/usr/lib/lua/luci/model/cbi/openrung
+
+          install -m 0644 \
+            package/luci-app-openrung/controller.lua \
+            work/luci/usr/lib/lua/luci/controller/openrung.lua
+
+          install -m 0644 \
+            package/luci-app-openrung/openrung.lua \
+            work/luci/usr/lib/lua/luci/model/cbi/openrung/main.lua
+
           cat > work/luci/CONTROL/control <<EOF
           Package: luci-app-openrung
           Version: ${VERSION}
@@ -85,10 +129,87 @@ jobs:
           Depends: luci-base, openrung-client
           Description: Chinese LuCI management page for OpenRung
           EOF
-          opkg-build -o root -g root work/luci out
+
+          # Generate standard IPK archives using Python.
+          cat > build_ipk.py <<'PY'
+          import os
+          import sys
+          import tarfile
+          import tempfile
+          import gzip
+          from pathlib import Path
+
+          def make_tar_gz(source, output, exclude_control=False):
+              with open(output, "wb") as raw:
+                  with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as gz:
+                      with tarfile.open(fileobj=gz, mode="w") as tar:
+                          for path in sorted(source.rglob("*")):
+                              if exclude_control and path == source / "CONTROL":
+                                  continue
+                              if exclude_control and source / "CONTROL" in path.parents:
+                                  continue
+                              tar.add(path, arcname=str(path.relative_to(source)))
+
+          def ar_member(name, data):
+              name_field = (name + "/").encode().ljust(16, b" ")
+              header = (
+                  name_field
+                  + b"0".ljust(12, b" ")
+                  + b"0".ljust(6, b" ")
+                  + b"0".ljust(6, b" ")
+                  + b"100644".ljust(8, b" ")
+                  + str(len(data)).encode().ljust(10, b" ")
+                  + b"`\n"
+              )
+              return header + data + (b"\n" if len(data) % 2 else b"")
+
+          def build(source, output):
+              source = Path(source)
+              output = Path(output)
+
+              with tempfile.TemporaryDirectory() as tmp:
+                  tmp = Path(tmp)
+                  control = tmp / "control.tar.gz"
+                  data = tmp / "data.tar.gz"
+
+                  make_tar_gz(source, control, exclude_control=False)
+
+                  data_root = tmp / "data-root"
+                  data_root.mkdir()
+
+                  for item in source.iterdir():
+                      if item.name == "CONTROL":
+                          continue
+                      target = data_root / item.name
+                      if item.is_dir():
+                          import shutil
+                          shutil.copytree(item, target)
+                      else:
+                          import shutil
+                          shutil.copy2(item, target)
+
+                  make_tar_gz(data_root, data)
+
+                  with open(output, "wb") as f:
+                      f.write(b"!<arch>\n")
+                      f.write(ar_member("debian-binary", b"2.0\n"))
+                      f.write(ar_member("control.tar.gz", control.read_bytes()))
+                      f.write(ar_member("data.tar.gz", data.read_bytes()))
+
+          build(sys.argv[1], sys.argv[2])
+          PY
+
+          python3 build_ipk.py work/client out/openrung-client_${VERSION}_x86_64.ipk
+          python3 build_ipk.py work/luci out/luci-app-openrung_${VERSION}_all.ipk
+
           cp out/*.ipk .
+
           sha256sum ./*.ipk > SHA256SUMS
+
           echo "PACKAGE_VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+          ls -lh ./*.ipk
+          cat SHA256SUMS
 
       - name: Upload packages
         uses: actions/upload-artifact@v4
