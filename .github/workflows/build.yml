@@ -1,4 +1,3 @@
-
 name: Build OpenRung OpenWrt IPK
 
 on:
@@ -17,7 +16,6 @@ on:
 permissions:
   contents: write
 
-# Prevent older builds from overwriting the latest release assets.
 concurrency:
   group: openrung-ipk-${{ github.ref }}
   cancel-in-progress: true
@@ -55,23 +53,33 @@ jobs:
           echo "OPENRUNG_COMMIT=$COMMIT" >> "$GITHUB_ENV"
           echo "OpenRung commit: $COMMIT"
 
-      - name: Build Linux amd64 client
+      - name: Build Linux x86_64 and ARM64 clients
         working-directory: upstream
         env:
           CGO_ENABLED: "0"
-          GOOS: linux
-          GOARCH: amd64
         run: |
           set -eux
           go version
-          go build \
-            -trimpath \
-            -tags 'with_utls,with_external_windivert' \
-            -ldflags='-s -w' \
-            -o ../openrung-client \
-            ./cmd/client
-          file ../openrung-client
-          test -s ../openrung-client
+
+          # OpenWrt package architectures:
+          # x86_64        -> Linux amd64
+          # aarch64_generic -> Linux arm64
+          for target in "amd64 x86_64" "arm64 aarch64_generic"; do
+            set -- $target
+            GOARCH="$1"
+            PACKAGE_ARCH="$2"
+
+            echo "===== Building Linux/$GOARCH ($PACKAGE_ARCH) ====="
+            GOOS=linux GOARCH="$GOARCH" go build \
+              -trimpath \
+              -tags 'with_utls,with_external_windivert' \
+              -ldflags='-s -w' \
+              -o "../openrung-client-$PACKAGE_ARCH" \
+              ./cmd/client
+
+            file "../openrung-client-$PACKAGE_ARCH"
+            test -s "../openrung-client-$PACKAGE_ARCH"
+          done
 
       - name: Assemble OpenWrt IPK packages
         run: |
@@ -79,53 +87,60 @@ jobs:
 
           VERSION="0.1.0+${OPENRUNG_COMMIT:0:8}.${GITHUB_SHA:0:8}"
 
-          mkdir -p out \
-            work/client/usr/bin \
-            work/client/usr/libexec \
-            work/client/etc/config \
-            work/client/etc/init.d \
-            work/client/CONTROL
+          mkdir -p out
 
-          install -m 0755 openrung-client \
-            work/client/usr/libexec/openrung-client.bin
+          for PACKAGE_ARCH in x86_64 aarch64_generic; do
+            mkdir -p \
+              "work/$PACKAGE_ARCH/usr/bin" \
+              "work/$PACKAGE_ARCH/usr/libexec" \
+              "work/$PACKAGE_ARCH/etc/config" \
+              "work/$PACKAGE_ARCH/etc/init.d" \
+              "work/$PACKAGE_ARCH/CONTROL"
 
-          install -m 0755 \
-            package/openrung-client/openrung-client-wrapper \
-            work/client/usr/bin/openrung-client
+            install -m 0755 "openrung-client-$PACKAGE_ARCH" \
+              "work/$PACKAGE_ARCH/usr/libexec/openrung-client.bin"
 
-          install -m 0644 \
-            package/openrung-client/openrung.config \
-            work/client/etc/config/openrung
+            install -m 0755 \
+              package/openrung-client/openrung-client-wrapper \
+              "work/$PACKAGE_ARCH/usr/bin/openrung-client"
 
-          # Preserve user settings (enabled flag and custom proxy port) on upgrades.
-          printf '/etc/config/openrung\\n' > work/client/CONTROL/conffiles
+            install -m 0644 \
+              package/openrung-client/openrung.config \
+              "work/$PACKAGE_ARCH/etc/config/openrung"
 
-          install -m 0755 \
-            package/openrung-client/openrung.init \
-            work/client/etc/init.d/openrung
+            printf '/etc/config/openrung\\n' > "work/$PACKAGE_ARCH/CONTROL/conffiles"
 
-          # opkg runs this after installation to register the init script.
-          install -m 0755 \
-            package/openrung-client/openrung.postinst \
-            work/client/CONTROL/postinst
+            install -m 0755 \
+              package/openrung-client/openrung.init \
+              "work/$PACKAGE_ARCH/etc/init.d/openrung"
 
-          mkdir -p work/client/usr/share/openrung
+            install -m 0755 \
+              package/openrung-client/openrung.postinst \
+              "work/$PACKAGE_ARCH/CONTROL/postinst"
 
-          cp upstream/LICENSE \
-            work/client/usr/share/openrung/LICENSE
+            mkdir -p "work/$PACKAGE_ARCH/usr/share/openrung"
+            cp upstream/LICENSE "work/$PACKAGE_ARCH/usr/share/openrung/LICENSE"
 
-          if [ -f upstream/THIRD_PARTY_NOTICES.md ]; then
-            cp upstream/THIRD_PARTY_NOTICES.md \
-              work/client/usr/share/openrung/THIRD_PARTY_NOTICES.md
-          fi
+            if [ -f upstream/THIRD_PARTY_NOTICES.md ]; then
+              cp upstream/THIRD_PARTY_NOTICES.md \
+                "work/$PACKAGE_ARCH/usr/share/openrung/THIRD_PARTY_NOTICES.md"
+            fi
 
-          cat > work/client/CONTROL/control <<EOF
+            cat > "work/$PACKAGE_ARCH/CONTROL/control" <<EOF
           Package: openrung-client
           Version: ${VERSION}
-          Architecture: x86_64
+          Architecture: ${PACKAGE_ARCH}
           Maintainer: OpenWrt OpenRung Community
-          Description: OpenRung CLI client for OpenWrt x86_64
+          Description: OpenRung CLI client for OpenWrt (${PACKAGE_ARCH})
           EOF
+
+            python3 build_ipk.py \
+              "work/$PACKAGE_ARCH" \
+              "out/openrung-client_${VERSION}_${PACKAGE_ARCH}.ipk"
+
+            cp "out/openrung-client_${VERSION}_${PACKAGE_ARCH}.ipk" \
+              "out/openrung-client_${PACKAGE_ARCH}.ipk"
+          done
 
           mkdir -p work/luci/CONTROL
           mkdir -p work/luci/usr/lib/lua/luci/controller
@@ -156,91 +171,34 @@ jobs:
 
           def make_tar_gz(source, output, exclude_control=False):
               source = Path(source)
-
-              with tarfile.open(
-                  output,
-                  "w:gz",
-                  format=tarfile.GNU_FORMAT
-              ) as tar:
+              with tarfile.open(output, "w:gz", format=tarfile.GNU_FORMAT) as tar:
                   for path in sorted(source.rglob("*")):
                       rel = path.relative_to(source)
-
                       if exclude_control and rel.parts and rel.parts[0] == "CONTROL":
                           continue
-
-                      tar.add(
-                          path,
-                          arcname="./" + str(rel),
-                          recursive=False
-                      )
+                      tar.add(path, arcname="./" + str(rel), recursive=False)
 
           def build(source, output):
               source = Path(source)
               output = Path(output).resolve()
-
               with tempfile.TemporaryDirectory() as tmpdir:
                   tmp = Path(tmpdir)
-
-                  make_tar_gz(
-                      source / "CONTROL",
-                      tmp / "control.tar.gz"
-                  )
-
-                  make_tar_gz(
-                      source,
-                      tmp / "data.tar.gz",
-                      exclude_control=True
-                  )
-
-                  (tmp / "debian-binary").write_text(
-                      "2.0\n",
-                      encoding="ascii"
-                  )
-
-                  # OpenWrt native IPK format:
-                  # gzip(tar(debian-binary, data.tar.gz, control.tar.gz))
-                  with tarfile.open(
-                      output,
-                      "w:gz",
-                      format=tarfile.GNU_FORMAT
-                  ) as tar:
-                      tar.add(
-                          tmp / "debian-binary",
-                          arcname="./debian-binary"
-                      )
-
-                      tar.add(
-                          tmp / "data.tar.gz",
-                          arcname="./data.tar.gz"
-                      )
-
-                      tar.add(
-                          tmp / "control.tar.gz",
-                          arcname="./control.tar.gz"
-                      )
+                  make_tar_gz(source / "CONTROL", tmp / "control.tar.gz")
+                  make_tar_gz(source, tmp / "data.tar.gz", exclude_control=True)
+                  (tmp / "debian-binary").write_text("2.0\\n", encoding="ascii")
+                  with tarfile.open(output, "w:gz", format=tarfile.GNU_FORMAT) as tar:
+                      tar.add(tmp / "debian-binary", arcname="./debian-binary")
+                      tar.add(tmp / "data.tar.gz", arcname="./data.tar.gz")
+                      tar.add(tmp / "control.tar.gz", arcname="./control.tar.gz")
 
           build(sys.argv[1], sys.argv[2])
           PY
 
-          python3 build_ipk.py \
-            work/client \
-            out/openrung-client_${VERSION}_x86_64.ipk
-
-          python3 build_ipk.py \
-            work/luci \
-            out/luci-app-openrung_${VERSION}_all.ipk
-
-          # Stable names for direct installation
-          cp out/openrung-client_${VERSION}_x86_64.ipk \
-            out/openrung-client_x86_64.ipk
-
-          cp out/luci-app-openrung_${VERSION}_all.ipk \
-            out/luci-app-openrung_all.ipk
+          python3 build_ipk.py work/luci out/luci-app-openrung_${VERSION}_all.ipk
+          cp out/luci-app-openrung_${VERSION}_all.ipk out/luci-app-openrung_all.ipk
 
           cp out/*.ipk .
-
           sha256sum ./*.ipk > SHA256SUMS
-
           echo "PACKAGE_VERSION=${VERSION}" >> "$GITHUB_ENV"
 
           ls -lh ./*.ipk
@@ -255,41 +213,30 @@ jobs:
           sh -n package/openrung-client/openrung.postinst
 
           for pkg in \
-            openrung-client_${PACKAGE_VERSION}_x86_64.ipk \
-            luci-app-openrung_${PACKAGE_VERSION}_all.ipk
-          do
+            "openrung-client_${PACKAGE_VERSION}_x86_64.ipk" \
+            "openrung-client_${PACKAGE_VERSION}_aarch64_generic.ipk" \
+            "luci-app-openrung_${PACKAGE_VERSION}_all.ipk"; do
             echo "===== Verify $pkg ====="
-
-            # Check outer gzip
             gzip -t "$pkg"
-
-            # Check outer tar
             tar -tzf "$pkg"
 
             mkdir -p verify
             tar -xzf "$pkg" -C verify
-
-            # Check IPK version
             test "$(cat verify/debian-binary)" = "2.0"
-
-            # Check control archive
             gzip -t verify/control.tar.gz
             tar -tzf verify/control.tar.gz
             tar -xOzf verify/control.tar.gz ./control
-
-            # Check data archive
             gzip -t verify/data.tar.gz
             tar -tzf verify/data.tar.gz
-
             rm -rf verify
           done
 
-          echo "All IPK packages verified successfully."
+          echo "All x86_64, ARM64 and LuCI IPK packages verified successfully."
 
       - name: Upload packages as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openrung-openwrt-ipk
+          name: openrung-openwrt-ipk-universal
           path: |
             *.ipk
             SHA256SUMS
@@ -300,13 +247,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: openwrt-latest
-          name: OpenWrt latest IPK packages
-          target_commitish: main
+          name: OpenWrt latest universal IPK packages
+          target_commitish: ${{ github.sha }}
           body: |
-            Automatically built OpenRung packages for OpenWrt x86_64.
+            Automatically built OpenRung packages for OpenWrt x86_64 and ARM64.
+            The LuCI package is architecture-independent.
             Stable asset names are intended for direct download from OpenWrt.
           files: |
             out/openrung-client_x86_64.ipk
+            out/openrung-client_aarch64_generic.ipk
             out/luci-app-openrung_all.ipk
             SHA256SUMS
           overwrite_files: true
