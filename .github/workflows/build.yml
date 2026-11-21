@@ -10,7 +10,6 @@ on:
         default: "main"
   push:
     paths:
-      - ".github/workflows/build.yml"
       - "package/**"
       - "README.md"
 
