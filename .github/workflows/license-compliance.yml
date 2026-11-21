@@ -232,7 +232,7 @@ jobs:
             "corresponding-artifact/$CHECKSUM"
 
       - name: Verify repository license declarations (manual run)
-        if: github.event_name == 'workflow_dispatch' && inputs.build_run_id == ''
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           set -euo pipefail
