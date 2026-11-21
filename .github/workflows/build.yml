@@ -7,7 +7,6 @@ on:
         description: "OpenRung git ref (tag/branch/commit)"
         required: false
         default: "main"
-
   push:
     paths:
       - ".github/workflows/build.yml"
@@ -15,7 +14,7 @@ on:
       - "README.md"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -41,17 +40,13 @@ jobs:
           INPUT_REF: ${{ inputs.openrung_ref }}
         run: |
           set -eux
-
           REF="${INPUT_REF:-main}"
-
           git init upstream
           git -C upstream remote add origin https://github.com/openrung/openrung.git
           git -C upstream fetch --depth 1 origin "$REF"
           git -C upstream checkout --detach FETCH_HEAD
-
           COMMIT="$(git -C upstream rev-parse HEAD)"
           echo "OPENRUNG_COMMIT=$COMMIT" >> "$GITHUB_ENV"
-
           echo "OpenRung commit: $COMMIT"
 
       - name: Build Linux amd64 client
@@ -62,44 +57,29 @@ jobs:
           GOARCH: amd64
         run: |
           set -eux
-
           go version
-
           go build \
             -trimpath \
             -tags 'with_utls,with_external_windivert' \
             -ldflags='-s -w' \
             -o ../openrung-client \
             ./cmd/client
-
           file ../openrung-client
           test -s ../openrung-client
 
-      - name: Assemble IPK packages
+      - name: Assemble valid IPK packages
         run: |
           set -eux
-
           VERSION="0.1.0+${OPENRUNG_COMMIT:0:8}"
 
-          mkdir -p out
-          mkdir -p work/client/usr/bin
-          mkdir -p work/client/etc/config
-          mkdir -p work/client/etc/init.d
-          mkdir -p work/client/CONTROL
+          mkdir -p out work/client/usr/bin work/client/etc/config work/client/etc/init.d work/client/CONTROL
+          install -m 0755 openrung-client work/client/usr/bin/openrung-client
+          install -m 0644 package/openrung-client/openrung.config work/client/etc/config/openrung
+          install -m 0755 package/openrung-client/openrung.init work/client/etc/init.d/openrung
 
-          install -m 0755 openrung-client \
-            work/client/usr/bin/openrung-client
-
-          install -m 0644 \
-            package/openrung-client/openrung.config \
-            work/client/etc/config/openrung
-
-          install -m 0755 \
-            package/openrung-client/openrung.init \
-            work/client/etc/init.d/openrung
-
-          cp upstream/LICENSE work/client/usr/share-openrung-LICENSE 2>/dev/null || true
-          cp upstream/THIRD_PARTY_NOTICES.md work/client/usr/share-openrung-THIRD_PARTY_NOTICES.md 2>/dev/null || true
+          mkdir -p work/client/usr/share/openrung
+          cp upstream/LICENSE work/client/usr/share/openrung/LICENSE
+          cp upstream/THIRD_PARTY_NOTICES.md work/client/usr/share/openrung/THIRD_PARTY_NOTICES.md
 
           cat > work/client/CONTROL/control <<EOF
           Package: openrung-client
@@ -112,14 +92,8 @@ jobs:
           mkdir -p work/luci/CONTROL
           mkdir -p work/luci/usr/lib/lua/luci/controller
           mkdir -p work/luci/usr/lib/lua/luci/model/cbi/openrung
-
-          install -m 0644 \
-            package/luci-app-openrung/controller.lua \
-            work/luci/usr/lib/lua/luci/controller/openrung.lua
-
-          install -m 0644 \
-            package/luci-app-openrung/openrung.lua \
-            work/luci/usr/lib/lua/luci/model/cbi/openrung/main.lua
+          install -m 0644 package/luci-app-openrung/controller.lua work/luci/usr/lib/lua/luci/controller/openrung.lua
+          install -m 0644 package/luci-app-openrung/openrung.lua work/luci/usr/lib/lua/luci/model/cbi/openrung/main.lua
 
           cat > work/luci/CONTROL/control <<EOF
           Package: luci-app-openrung
@@ -130,30 +104,27 @@ jobs:
           Description: Chinese LuCI management page for OpenRung
           EOF
 
-          # Generate standard IPK archives using Python.
           cat > build_ipk.py <<'PY'
-          import os
+          import gzip
           import sys
           import tarfile
           import tempfile
-          import gzip
           from pathlib import Path
 
           def make_tar_gz(source, output, exclude_control=False):
+              source = Path(source)
               with open(output, "wb") as raw:
                   with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as gz:
                       with tarfile.open(fileobj=gz, mode="w") as tar:
                           for path in sorted(source.rglob("*")):
-                              if exclude_control and path == source / "CONTROL":
+                              rel = path.relative_to(source)
+                              if exclude_control and rel.parts and rel.parts[0] == "CONTROL":
                                   continue
-                              if exclude_control and source / "CONTROL" in path.parents:
-                                  continue
-                              tar.add(path, arcname=str(path.relative_to(source)))
+                              tar.add(path, arcname="./" + str(rel), recursive=False)
 
           def ar_member(name, data):
-              name_field = (name + "/").encode().ljust(16, b" ")
               header = (
-                  name_field
+                  (name + "/").encode().ljust(16, b" ")
                   + b"0".ljust(12, b" ")
                   + b"0".ljust(6, b" ")
                   + b"0".ljust(6, b" ")
@@ -165,30 +136,15 @@ jobs:
 
           def build(source, output):
               source = Path(source)
-              output = Path(output)
-
               with tempfile.TemporaryDirectory() as tmp:
                   tmp = Path(tmp)
                   control = tmp / "control.tar.gz"
                   data = tmp / "data.tar.gz"
 
-                  make_tar_gz(source, control, exclude_control=False)
-
-                  data_root = tmp / "data-root"
-                  data_root.mkdir()
-
-                  for item in source.iterdir():
-                      if item.name == "CONTROL":
-                          continue
-                      target = data_root / item.name
-                      if item.is_dir():
-                          import shutil
-                          shutil.copytree(item, target)
-                      else:
-                          import shutil
-                          shutil.copy2(item, target)
-
-                  make_tar_gz(data_root, data)
+                  # IPK control archive must contain ./control at its root.
+                  make_tar_gz(source / "CONTROL", control)
+                  # Payload archive contains package files, but not CONTROL/.
+                  make_tar_gz(source, data, exclude_control=True)
 
                   with open(output, "wb") as f:
                       f.write(b"!<arch>\n")
@@ -202,16 +158,28 @@ jobs:
           python3 build_ipk.py work/client out/openrung-client_${VERSION}_x86_64.ipk
           python3 build_ipk.py work/luci out/luci-app-openrung_${VERSION}_all.ipk
 
+          # Stable names for direct installation from OpenWrt.
+          cp out/openrung-client_${VERSION}_x86_64.ipk out/openrung-client_x86_64.ipk
+          cp out/luci-app-openrung_${VERSION}_all.ipk out/luci-app-openrung_all.ipk
           cp out/*.ipk .
-
           sha256sum ./*.ipk > SHA256SUMS
-
           echo "PACKAGE_VERSION=${VERSION}" >> "$GITHUB_ENV"
-
           ls -lh ./*.ipk
           cat SHA256SUMS
 
-      - name: Upload packages
+      - name: Verify IPK archive structure
+        run: |
+          set -eux
+          for pkg in openrung-client_${PACKAGE_VERSION}_x86_64.ipk luci-app-openrung_${PACKAGE_VERSION}_all.ipk; do
+            ar t "$pkg"
+            mkdir -p verify
+            (cd verify && ar x "../$pkg" control.tar.gz)
+            tar -tzf verify/control.tar.gz
+            tar -xOzf verify/control.tar.gz ./control | head
+            rm -rf verify
+          done
+
+      - name: Upload packages as workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: openrung-openwrt-ipk
@@ -220,3 +188,19 @@ jobs:
             SHA256SUMS
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish latest packages to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: openwrt-latest
+          name: OpenWrt latest IPK packages
+          target_commitish: main
+          body: |
+            Automatically built OpenRung packages for OpenWrt x86_64.
+            Stable asset names are intended for direct download from OpenWrt.
+          files: |
+            out/openrung-client_x86_64.ipk
+            out/luci-app-openrung_all.ipk
+            SHA256SUMS
+          overwrite_files: true
+          make_latest: true
