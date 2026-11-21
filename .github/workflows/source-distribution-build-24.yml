@@ -10,10 +10,9 @@ jobs:
   source-distribution:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout repository at the #24 packaging source commit
+      - name: Checkout isolated compliance branch (retain #24 history)
         uses: actions/checkout@v4
         with:
-          ref: ea2385243c93440fcede94923a7f83477d27af70
           fetch-depth: 0
 
       - name: Set up Go
