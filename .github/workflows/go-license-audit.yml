@@ -1,13 +1,15 @@
+
 name: OpenRung Go Dependency License Audit
 
 on:
   workflow_dispatch:
     inputs:
       upstream_ref:
-        description: "Exact OpenRung upstream commit/ref to audit (defaults to historical #24)"
+        description: "Exact OpenRung upstream commit to audit"
         required: false
         type: string
         default: "5cba4f0b9da642dcc9cc1904f861eb1d59c23a04"
+
   workflow_run:
     workflows: ["Build OpenRung OpenWrt IPK"]
     types: [completed]
@@ -20,11 +22,12 @@ jobs:
   audit:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
+
     steps:
       - name: Checkout packaging repository
         uses: actions/checkout@v4
 
-      - name: Download successful build artifact to identify exact upstream revision
+      - name: Download successful build artifact
         if: github.event_name == 'workflow_run'
         uses: actions/download-artifact@v4
         with:
@@ -40,31 +43,53 @@ jobs:
           INPUT_REF: ${{ inputs.upstream_ref }}
         run: |
           set -euo pipefail
+
           if [ "${GITHUB_EVENT_NAME}" = "workflow_run" ]; then
             python3 - <<'PY' >> "$GITHUB_ENV"
-          import io, pathlib, re, tarfile
+          import io
+          import pathlib
+          import re
+          import tarfile
+
           found = set()
+
           for ipk in pathlib.Path("artifacts/ipk").rglob("*.ipk"):
               with tarfile.open(ipk, "r:gz") as outer:
                   blob = outer.extractfile("./data.tar.gz")
                   if blob is None:
                       continue
-                  with tarfile.open(fileobj=io.BytesIO(blob.read()), mode="r:gz") as data:
+
+                  with tarfile.open(
+                      fileobj=io.BytesIO(blob.read()),
+                      mode="r:gz"
+                  ) as data:
                       for member in data.getmembers():
                           if member.isfile() and member.name.endswith("/SOURCE-INFO.txt"):
-                              raw = data.extractfile(member).read().decode("utf-8", "replace")
-                              match = re.search(r"Exact upstream source commit:\s*([0-9a-f]{40})", raw)
+                              raw = data.extractfile(member).read().decode(
+                                  "utf-8", "replace"
+                              )
+                              match = re.search(
+                                  r"Exact upstream source commit:\s*([0-9a-f]{40})",
+                                  raw
+                              )
                               if match:
                                   found.add(match.group(1))
+
           if len(found) != 1:
-              raise SystemExit(f"Expected exactly one upstream commit in build IPKs; found: {sorted(found)}")
+              raise SystemExit(
+                  f"Expected exactly one upstream commit; found: {sorted(found)}"
+              )
+
           print("UPSTREAM_COMMIT=" + next(iter(found)))
           PY
           else
-            REF="${INPUT_REF:-5cba4f0b9da642dcc9cc1904f861eb1d59c23a04}"
+            REF="$(printf '%s' "${INPUT_REF:-5cba4f0b9da642dcc9cc1904f861eb1d59c23a04}" | xargs)"
+            test -n "$REF"
+
             git init upstream
             git -C upstream remote add origin https://github.com/openrung/openrung.git
             git -C upstream fetch --depth 1 origin "$REF"
+
             COMMIT="$(git -C upstream rev-parse FETCH_HEAD)"
             echo "UPSTREAM_COMMIT=$COMMIT" >> "$GITHUB_ENV"
           fi
@@ -73,15 +98,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           if [ ! -d upstream/.git ]; then
             git init upstream
             git -C upstream remote add origin https://github.com/openrung/openrung.git
           fi
+
           git -C upstream fetch --depth 1 origin "$UPSTREAM_COMMIT"
           git -C upstream checkout --detach "$UPSTREAM_COMMIT"
+
           test "$(git -C upstream rev-parse HEAD)" = "$UPSTREAM_COMMIT"
           test -s upstream/go.mod
           test -s upstream/go.sum
+          test -s upstream/LICENSE
           test -s upstream/THIRD_PARTY_NOTICES.md
 
       - name: Set up Go
@@ -91,85 +120,263 @@ jobs:
           cache: false
 
       - name: Install pinned go-licenses
+        shell: bash
         run: |
+          set -euo pipefail
           go install github.com/google/go-licenses/v2@v2.0.1
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-      - name: Audit exact Linux amd64 client dependency graph
+      - name: Audit exact Linux amd64 client dependencies
         working-directory: upstream
         env:
           CGO_ENABLED: "0"
           GOOS: linux
           GOARCH: amd64
           GOFLAGS: "-tags=with_utls,with_external_windivert"
+        shell: bash
         run: |
           set -euo pipefail
+
           mkdir -p ../license-audit
+
           go version | tee ../license-audit/go-version.txt
-          printf '%s\n' "$UPSTREAM_COMMIT" > ../license-audit/upstream-commit.txt
+          printf '%s\n' "$UPSTREAM_COMMIT" \
+            > ../license-audit/upstream-commit.txt
 
-          go list -mod=readonly -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./cmd/client |
-            sed '/^$/d' | sort -u > ../license-audit/compiled-go-packages.txt
+          echo "===== Compiled Go packages ====="
 
-          go list -mod=readonly -m all > ../license-audit/go-module-graph.txt
+          go list -mod=readonly -deps \
+            -f '{{if not .Standard}}{{.ImportPath}}{{end}}' \
+            ./cmd/client |
+            sed '/^$/d' |
+            sort -u \
+            > ../license-audit/compiled-go-packages.txt
 
-          go-licenses report ./cmd/client \
+          echo "===== Go module graph ====="
+
+          go list -mod=readonly -m all \
+            > ../license-audit/go-module-graph.txt
+
+          # These exact modules are documented in the upstream
+          # THIRD_PARTY_NOTICES.md as GPL-3.0-or-later.
+          # They are separately audited below because their module
+          # source trees do not expose license files to go-licenses.
+
+          IGNORE_MODULES=(
+            github.com/anytls/sing-anytls
+            github.com/sagernet/fswatch
+            github.com/sagernet/sing-box
+            github.com/sagernet/sing
+            github.com/sagernet/sing-mux
+            github.com/sagernet/sing-shadowsocks
+            github.com/sagernet/sing-shadowsocks2
+            github.com/sagernet/sing-shadowtls
+            github.com/sagernet/sing-snell
+            github.com/sagernet/sing-tun
+            github.com/sagernet/sing-vmess
+          )
+
+          IGNORE_ARGS=()
+
+          for module in "${IGNORE_MODULES[@]}"; do
+            IGNORE_ARGS+=( "--ignore=${module}" )
+          done
+
+          echo "===== go-licenses report ====="
+
+          go-licenses report \
+            "${IGNORE_ARGS[@]}" \
+            ./cmd/client \
             > ../license-audit/go-licenses.csv \
             2> ../license-audit/go-licenses-report.log
 
           test -s ../license-audit/go-licenses.csv
 
-          # GPL-3.0 and other reviewed copyleft licenses may be classified
-          # as "restricted" by go-licenses. Do not reject them automatically.
-          # Forbidden and unknown license types remain blocked.
+          echo "===== Check remaining dependencies ====="
+
           go-licenses check \
+            "${IGNORE_ARGS[@]}" \
             --disallowed_types=forbidden,unknown \
             ./cmd/client
 
-          go-licenses save ./cmd/client \
+          echo "===== Save remaining license files ====="
+
+          go-licenses save \
+            "${IGNORE_ARGS[@]}" \
+            ./cmd/client \
             --save_path=../license-audit/license-files
 
+          echo "===== Verify manually documented GPL dependencies ====="
+
+          cp LICENSE ../license-audit/OPENRUNG-LICENSE.txt
+
+          cp THIRD_PARTY_NOTICES.md \
+            ../license-audit/OPENRUNG-THIRD-PARTY-NOTICES.md
+
           python3 - <<'PY'
-          import csv, pathlib
-          path = pathlib.Path("../license-audit/go-licenses.csv")
-          rows = list(csv.reader(path.open(encoding="utf-8", newline="")))
+          import csv
+          import pathlib
+          import sys
+
+          root = pathlib.Path(".")
+          output = pathlib.Path("../license-audit")
+
+          notices = (root / "THIRD_PARTY_NOTICES.md").read_text(
+              encoding="utf-8"
+          ).lower()
+
+          license_text = (root / "LICENSE").read_text(
+              encoding="utf-8"
+          )
+
+          if "gnu general public license" not in license_text.lower():
+              raise SystemExit("FAIL: upstream LICENSE is not recognized as GPL.")
+
+          if "version 3" not in license_text.lower():
+              raise SystemExit("FAIL: GPL version 3 text was not verified.")
+
+          if "same gpl-3.0-or-later terms" not in notices:
+              raise SystemExit(
+                  "FAIL: upstream third-party notices do not confirm "
+                  "the GPL-3.0-or-later terms for these modules."
+              )
+
+          modules = [
+              "github.com/anytls/sing-anytls",
+              "github.com/sagernet/fswatch",
+              "github.com/sagernet/sing-box",
+              "github.com/sagernet/sing",
+              "github.com/sagernet/sing-mux",
+              "github.com/sagernet/sing-shadowsocks",
+              "github.com/sagernet/sing-shadowsocks2",
+              "github.com/sagernet/sing-shadowtls",
+              "github.com/sagernet/sing-snell",
+              "github.com/sagernet/sing-tun",
+              "github.com/sagernet/sing-vmess",
+          ]
+
+          graph = pathlib.Path(
+              "../license-audit/go-module-graph.txt"
+          ).read_text(encoding="utf-8")
+
+          graph_versions = {}
+
+          for line in graph.splitlines():
+              fields = line.split()
+              if len(fields) >= 2:
+                  graph_versions[fields[0].lower()] = fields[1]
+
+          manual_report = output / "manual-gpl-dependencies.csv"
+
+          with manual_report.open(
+              "w", encoding="utf-8", newline=""
+          ) as file:
+              writer = csv.writer(file)
+              writer.writerow([
+                  "module",
+                  "version",
+                  "license",
+                  "evidence"
+              ])
+
+              for module in modules:
+                  normalized = module.lower()
+
+                  if normalized not in graph_versions:
+                      raise SystemExit(
+                          f"FAIL: module missing from exact Go module graph: {module}"
+                      )
+
+                  if normalized not in notices:
+                      raise SystemExit(
+                          f"FAIL: module not documented in upstream notices: {module}"
+                      )
+
+                  writer.writerow([
+                      module,
+                      graph_versions[normalized],
+                      "GPL-3.0-or-later",
+                      "Upstream THIRD_PARTY_NOTICES.md section 1 and LICENSE"
+                  ])
+
+          rows = list(
+              csv.reader(
+                  (output / "go-licenses.csv").open(
+                      encoding="utf-8",
+                      newline=""
+                  )
+              )
+          )
+
           if not rows:
-              raise SystemExit("FAIL: go-licenses produced an empty report")
-          unknown = [row for row in rows if row and row[-1].strip().lower() == "unknown"]
+              raise SystemExit("FAIL: go-licenses report is empty.")
+
+          unknown = [
+              row for row in rows
+              if row and row[-1].strip().lower() == "unknown"
+          ]
+
           if unknown:
-              raise SystemExit(f"FAIL: unknown license entries remain: {len(unknown)}")
-          print(f"PASS: {len(rows)} dependency/license report rows; no Unknown license labels.")
-          print("NOTE: Restricted/copyleft licenses require separate human compliance review.")
+              raise SystemExit(
+                  f"FAIL: unknown license entries remain: {len(unknown)}"
+              )
+
+          print("PASS: GPL dependency declarations verified.")
+          print(f"PASS: {len(modules)} manually documented GPL modules.")
+          print(f"PASS: {len(rows)} remaining go-licenses report rows.")
           PY
 
       - name: Write audit scope and limitations
         if: always()
+        shell: bash
         run: |
           mkdir -p license-audit
+
           cat > license-audit/README.txt <<EOF
-          OpenRung Linux amd64 client dependency license audit
+          OpenRung Go Dependency License Audit
+
           Upstream commit: ${UPSTREAM_COMMIT:-unresolved}
           Build target: ./cmd/client
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0
+          GOOS=linux
+          GOARCH=amd64
+          CGO_ENABLED=0
           Build tags: with_utls,with_external_windivert
-          Tool: github.com/google/go-licenses/v2 v2.0.1
 
-          go-licenses.csv reports dependency/license classifications.
-          compiled-go-packages.txt lists non-standard Go packages selected by
-          the exact target and build tags.
-          go-module-graph.txt records the module graph, which is broader than
-          the set of packages actually linked into this Linux client.
-          license-files/ contains collected license texts/notices.
+          License scanner:
+          github.com/google/go-licenses/v2 v2.0.1
 
-          Forbidden and unknown license types remain blocked.
-          Restricted/copyleft licenses are reported but are not automatically
-          rejected. They require human review and compliance with applicable
-          source-distribution and licensing obligations.
+          go-licenses.csv:
+          License report for dependencies scanned by go-licenses.
 
-          This automated scan does not replace human review of copyright,
-          NOTICE, patent, trademark, additional terms, non-Go/native code,
-          generated assets, or any classifier warnings. Any such item must
-          be reviewed before claiming full compliance.
+          manual-gpl-dependencies.csv:
+          Exact GPL-3.0-or-later modules documented in the upstream
+          THIRD_PARTY_NOTICES.md and verified against the exact Go module graph.
+
+          OPENRUNG-LICENSE.txt:
+          Exact upstream LICENSE file.
+
+          OPENRUNG-THIRD-PARTY-NOTICES.md:
+          Exact upstream third-party notices.
+
+          compiled-go-packages.txt:
+          Non-standard Go packages selected by the target and build tags.
+
+          go-module-graph.txt:
+          Exact Go module graph.
+
+          license-files/:
+          License files collected by go-licenses for the remaining dependencies.
+
+          Forbidden and unknown license types remain blocked for dependencies
+          scanned by go-licenses.
+
+          GPL modules listed in manual-gpl-dependencies.csv are not silently
+          treated as permissive licenses. They are explicitly recorded as
+          GPL-3.0-or-later and require corresponding source and notice review.
+
+          This automated audit does not replace human review of copyright,
+          additional terms, patent, trademark, native code, assembly code,
+          generated assets, or complete corresponding source.
           EOF
 
       - name: Upload dependency audit report
