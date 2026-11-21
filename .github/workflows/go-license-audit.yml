@@ -1,3 +1,4 @@
+
 name: OpenRung Go Dependency License Audit
 
 on:
@@ -7,7 +8,8 @@ on:
         description: "Exact OpenRung upstream commit/ref to audit (defaults to historical #24)"
         required: false
         type: string
-        default: "5cba4f0b9da642dcc9cc1904f861eb1d59c23a04"
+        default: "5cba4f0b9da642dcc9cc1904f861eb1d59c23a04
+"
   workflow_run:
     workflows: ["Build OpenRung OpenWrt IPK"]
     types: [completed]
@@ -53,7 +55,7 @@ jobs:
                       for member in data.getmembers():
                           if member.isfile() and member.name.endswith("/SOURCE-INFO.txt"):
                               raw = data.extractfile(member).read().decode("utf-8", "replace")
-                              match = re.search(r"Exact upstream source commit:\\s*([0-9a-f]{40})", raw)
+                              match = re.search(r"Exact upstream source commit:\s*([0-9a-f]{40})", raw)
                               if match:
                                   found.add(match.group(1))
           if len(found) != 1:
@@ -107,13 +109,28 @@ jobs:
           mkdir -p ../license-audit
           go version | tee ../license-audit/go-version.txt
           printf '%s\n' "$UPSTREAM_COMMIT" > ../license-audit/upstream-commit.txt
+
           go list -mod=readonly -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./cmd/client |
             sed '/^$/d' | sort -u > ../license-audit/compiled-go-packages.txt
+
           go list -mod=readonly -m all > ../license-audit/go-module-graph.txt
-          go-licenses report ./cmd/client > ../license-audit/go-licenses.csv 2> ../license-audit/go-licenses-report.log
+
+          go-licenses report ./cmd/client \
+            > ../license-audit/go-licenses.csv \
+            2> ../license-audit/go-licenses-report.log
+
           test -s ../license-audit/go-licenses.csv
-          go-licenses check --disallowed_types=forbidden,restricted,unknown ./cmd/client
-          go-licenses save ./cmd/client --save_path=../license-audit/license-files
+
+          # GPL-3.0 and other reviewed copyleft licenses may be classified
+          # as "restricted" by go-licenses. Do not reject them automatically.
+          # Forbidden and unknown license types remain blocked.
+          go-licenses check \
+            --disallowed_types=forbidden,unknown \
+            ./cmd/client
+
+          go-licenses save ./cmd/client \
+            --save_path=../license-audit/license-files
+
           python3 - <<'PY'
           import csv, pathlib
           path = pathlib.Path("../license-audit/go-licenses.csv")
@@ -124,6 +141,7 @@ jobs:
           if unknown:
               raise SystemExit(f"FAIL: unknown license entries remain: {len(unknown)}")
           print(f"PASS: {len(rows)} dependency/license report rows; no Unknown license labels.")
+          print("NOTE: Restricted/copyleft licenses require separate human compliance review.")
           PY
 
       - name: Write audit scope and limitations
@@ -144,6 +162,11 @@ jobs:
           go-module-graph.txt records the module graph, which is broader than
           the set of packages actually linked into this Linux client.
           license-files/ contains collected license texts/notices.
+
+          Forbidden and unknown license types remain blocked.
+          Restricted/copyleft licenses are reported but are not automatically
+          rejected. They require human review and compliance with applicable
+          source-distribution and licensing obligations.
 
           This automated scan does not replace human review of copyright,
           NOTICE, patent, trademark, additional terms, non-Go/native code,
