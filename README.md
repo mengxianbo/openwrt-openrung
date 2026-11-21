@@ -25,41 +25,6 @@ CLI 的代理监听地址/端口由官方连接引擎管理；此包不伪造端
 
 Workflow 从官方 `openrung/openrung` main 分支拉取源码，使用 Go 1.25.5 编译；建议正式部署前将 `OPENRUNG_REF` 固定到经过验证的 tag 或 commit。
 
-## 安装
-
-
-1. 下载 OpenRung 客户端
-cd /tmp
-
-wget -O openrung-client.ipk \
-https://github.com/mengxianbo/openwrt-openrung/releases/latest/download/openrung-client_x86_64.ipk
-
-
-2. 下载 LuCI 管理界面
-wget -O luci-app-openrung.ipk \
-https://github.com/mengxianbo/openwrt-openrung/releases/latest/download/luci-app-openrung_all.ipk
-
-
-3. 安装
-opkg install ./openrung-client.ipk
-opkg install ./luci-app-openrung.ipk
-
-
-4. 设置本地监听端口为 44025，并开启开机自启
-uci set openrung.main.enabled='1'
-uci set openrung.main.proxy_port='44025'
-uci set openrung.main.passwall_guard='1'
-uci commit openrung
-
-/etc/init.d/openrung enable
-/etc/init.d/openrung restart
-
-
-5. 检查运行状态
-/etc/init.d/openrung status
-logread | grep -i openrung | tail -30
-netstat -lnpt 2>/dev/null | grep 44025
-
 
 ## 使用
 在 LuCI 设置国家代码（例如 `DE`）或 Relay ID；留空则交给官方引擎自动选择。PassWall 联动默认开启，需确认服务名与实际安装的 init 服务一致。
