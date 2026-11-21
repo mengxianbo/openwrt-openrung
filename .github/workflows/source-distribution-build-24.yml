@@ -1,0 +1,95 @@
+name: OpenRung #24 Source Distribution
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-distribution:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository at the #24 packaging source commit
+        uses: actions/checkout@v4
+        with:
+          ref: ea2385243c93440fcede94923a7f83477d27af70
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.5"
+          cache: false
+
+      - name: Prepare exact source trees
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGING_COMMIT="ea2385243c93440fcede94923a7f83477d27af70"
+          UPSTREAM_COMMIT="5cba4f0b9da642dcc9cc1904f861eb1d59c23a04"
+          mkdir -p dist packaging-source upstream-source
+
+          git archive --format=tar "$PACKAGING_COMMIT" |
+            gzip -n > "dist/openwrt-openrung-packaging-source-${PACKAGING_COMMIT}.tar.gz"
+
+          git clone --no-checkout https://github.com/openrung/openrung.git upstream-source/repo
+          git -C upstream-source/repo fetch --depth 1 origin "$UPSTREAM_COMMIT"
+          git -C upstream-source/repo checkout --detach "$UPSTREAM_COMMIT"
+          test "$(git -C upstream-source/repo rev-parse HEAD)" = "$UPSTREAM_COMMIT"
+
+          cd upstream-source/repo
+          go version
+          go mod download
+          go mod vendor
+          test -d vendor
+          test -s LICENSE
+          test -s THIRD_PARTY_NOTICES.md
+          cd ../..
+
+          tar --exclude=.git -czf "dist/openrung-upstream-source-${UPSTREAM_COMMIT}-with-vendor.tar.gz" -C upstream-source/repo .
+
+          cat > dist/SOURCE-MANIFEST.txt <<EOF
+          OpenRung #24 corresponding source distribution
+          Packaging repository: https://github.com/mengxianbo/openwrt-openrung
+          Packaging commit: ${PACKAGING_COMMIT}
+          Upstream repository: https://github.com/openrung/openrung
+          Upstream commit: ${UPSTREAM_COMMIT}
+          Stable build reference: Build #24 (Actions run 44885434847)
+          Stable IPK files and their existing SHA256SUMS are NOT modified by this workflow.
+          Packaging source archive: openwrt-openrung-packaging-source-${PACKAGING_COMMIT}.tar.gz
+          Upstream source archive: openrung-upstream-source-${UPSTREAM_COMMIT}-with-vendor.tar.gz
+          Upstream source archive includes the exact upstream Git tree and Go vendor dependencies reconstructed from its go.mod/go.sum.
+          Build toolchain: Go 1.25.5; GitHub Actions ubuntu-24.04.
+          EOF
+
+          cp upstream-source/repo/LICENSE dist/OPENRUNG-UPSTREAM-LICENSE
+          cp upstream-source/repo/THIRD_PARTY_NOTICES.md dist/OPENRUNG-THIRD-PARTY-NOTICES.md
+          cp LICENSES.md SOURCE-DISTRIBUTION.md dist/
+
+          (
+            cd dist
+            sha256sum ./*.tar.gz ./*.txt ./*.md > SHA256SUMS-SOURCE
+            sha256sum SHA256SUMS-SOURCE > SHA256SUMS-SOURCE.sha256
+          )
+          echo "SOURCE_DIST_DIR=dist" >> "$GITHUB_ENV"
+
+      - name: Verify source archives and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -c SHA256SUMS-SOURCE
+          sha256sum -c SHA256SUMS-SOURCE.sha256
+          tar -tzf openwrt-openrung-packaging-source-ea2385243c93440fcede94923a7f83477d27af70.tar.gz >/dev/null
+          tar -tzf openrung-upstream-source-5cba4f0b9da642dcc9cc1904f861eb1d59c23a04-with-vendor.tar.gz >/dev/null
+          grep -q "ea2385243c93440fcede94923a7f83477d27af70" SOURCE-MANIFEST.txt
+          grep -q "5cba4f0b9da642dcc9cc1904f861eb1d59c23a04" SOURCE-MANIFEST.txt
+
+      - name: Upload #24 source distribution as an independent artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openrung-build-24-corresponding-source
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 90
