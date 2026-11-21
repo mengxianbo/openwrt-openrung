@@ -91,7 +91,9 @@ jobs:
           cache: false
 
       - name: Install pinned go-licenses
-        run: go install github.com/google/go-licenses/v2@v2.0.1
+        run: |
+          go install github.com/google/go-licenses/v2@v2.0.1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Audit exact Linux amd64 client dependency graph
         working-directory: upstream
