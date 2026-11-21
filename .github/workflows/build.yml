@@ -124,6 +124,19 @@ jobs:
             exit 1
           fi
 
+          # Fill only distributor-specific placeholders in the packaged copy.
+          # The exact upstream source archive below remains byte-for-byte upstream.
+          sed -i \
+            's#<add contact / repo issues URL>#https://github.com/mengxianbo/openwrt-openrung/issues#g; s#<add public repo URL>#https://github.com/openrung/openrung#g' \
+            work/client/usr/share/openrung/THIRD_PARTY_NOTICES.md
+          if grep -Eq '<add contact / repo issues URL>|<add public repo URL>' \
+            work/client/usr/share/openrung/THIRD_PARTY_NOTICES.md; then
+            echo "Unresolved distributor placeholders remain in third-party notices" >&2
+            exit 1
+          fi
+          install -m 0644 DISTRIBUTION-NOTICE-ADDENDUM.md \
+            work/client/usr/share/openrung/DISTRIBUTION-NOTICE-ADDENDUM.md
+
           # Publish immutable, exact source snapshots corresponding to this build.
           git archive --format=tar.gz \
             --prefix="openwrt-openrung-${GITHUB_SHA}/" \
