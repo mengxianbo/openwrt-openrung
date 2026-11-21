@@ -126,7 +126,7 @@ jobs:
           if expected not in archives:
               raise SystemExit(f"FAIL: matching upstream source archive missing: {expected}")
 
-          pathlib.Path("upstream-commit.txt").write_text(upstream_commit + "\\n", encoding="ascii")
+          pathlib.Path("upstream-commit.txt").write_text(upstream_commit + "\n", encoding="ascii")
           print("PASS: both IPKs have license metadata and exact matching source archives.")
           PY
           echo "UPSTREAM_COMMIT=$(cat upstream-commit.txt)" >> "$GITHUB_ENV"
@@ -161,7 +161,7 @@ jobs:
             go list -mod=vendor -tags 'with_utls,with_external_windivert' -deps ./cmd/client >/dev/null
 
           MODULE_COUNT="$(grep -c '^# ' vendor/modules.txt || true)"
-          LICENSE_FILE_COUNT="$(find vendor -type f \\( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \\) | wc -l)"
+          LICENSE_FILE_COUNT="$(find vendor -type f \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) | wc -l)"
           test "$MODULE_COUNT" -gt 0
           test "$LICENSE_FILE_COUNT" -gt 0
 
@@ -192,7 +192,7 @@ jobs:
           tar -czf "corresponding-artifact/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz" \
             -C corresponding "openrung-${UPSTREAM_COMMIT}"
           test -s "corresponding-artifact/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz"
-          sha256sum corresponding-artifact/*.tar.gz > corresponding-artifact/SHA256SUMS
+          sha256sum corresponding-artifact/*.tar.gz > corresponding-artifact/CORRESPONDING-SOURCE-SHA256SUMS
 
       - name: Upload corresponding-source bundle as workflow artifact
         if: github.event_name == 'workflow_run'
@@ -201,7 +201,7 @@ jobs:
           name: openrung-corresponding-source
           path: |
             corresponding-artifact/*.tar.gz
-            corresponding-artifact/SHA256SUMS
+            corresponding-artifact/CORRESPONDING-SOURCE-SHA256SUMS
           if-no-files-found: error
           retention-days: 90
 
