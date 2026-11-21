@@ -17,6 +17,11 @@ on:
 permissions:
   contents: write
 
+# Prevent older builds from overwriting the latest release assets.
+concurrency:
+  group: openrung-ipk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-24.04
