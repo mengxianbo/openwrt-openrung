@@ -51,7 +51,7 @@ function status.cfgvalue(self, section)
             .. "（端口 " .. port_value .. "）"
     end
 
-    local service_json = sys.exec("ubus call service list '{\\"name\\":\\"openrung\\"}' 2>/dev/null")
+    local service_json = sys.exec([[ubus call service list '{"name":"openrung"}' 2>/dev/null]])
     local process_running = service_json and service_json:match('"pid"%s*:%s*%d+')
     if process_running then
         return translate("服务进程已注册并运行，但端口 ") .. port_value
