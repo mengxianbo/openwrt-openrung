@@ -1,9 +1,6 @@
 name: OpenRung License Compliance
 
 on:
-  workflow_run:
-    workflows: ["Build OpenRung OpenWrt IPK"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       build_run_id:
@@ -13,7 +10,7 @@ on:
 
 permissions:
   actions: read
-  contents: write
+  contents: read
 
 jobs:
   verify-distribution:
