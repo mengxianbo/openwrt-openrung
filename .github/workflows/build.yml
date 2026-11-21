@@ -84,7 +84,10 @@ jobs:
             work/client/usr/libexec \
             work/client/etc/config \
             work/client/etc/init.d \
-            work/client/CONTROL
+            work/client/usr/share/openrung \
+            work/client/CONTROL \
+            work/luci/usr/share/licenses/luci-app-openrung \
+            work/luci/CONTROL
 
           install -m 0755 openrung-client \
             work/client/usr/libexec/openrung-client.bin
@@ -117,13 +120,56 @@ jobs:
           if [ -f upstream/THIRD_PARTY_NOTICES.md ]; then
             cp upstream/THIRD_PARTY_NOTICES.md \
               work/client/usr/share/openrung/THIRD_PARTY_NOTICES.md
+          else
+            echo "Missing upstream THIRD_PARTY_NOTICES.md" >&2
+            exit 1
           fi
+
+          # Publish immutable, exact source snapshots corresponding to this build.
+          git archive --format=tar.gz \
+            --prefix="openwrt-openrung-${GITHUB_SHA}/" \
+            "${GITHUB_SHA}" > "out/openwrt-openrung-source-${GITHUB_SHA}.tar.gz"
+
+          git -C upstream archive --format=tar.gz \
+            --prefix="openrung-${OPENRUNG_COMMIT}/" \
+            HEAD > "out/openrung-upstream-source-${OPENRUNG_COMMIT}.tar.gz"
+
+          cat > work/client/usr/share/openrung/SOURCE-INFO.txt <<EOF
+          OpenWrt OpenRung package source information
+
+          Packaging repository:
+          https://github.com/mengxianbo/openwrt-openrung
+          Exact packaging source commit: ${GITHUB_SHA}
+          Exact packaging source archive:
+          https://github.com/mengxianbo/openwrt-openrung/archive/${GITHUB_SHA}.tar.gz
+
+          OpenRung upstream:
+          https://github.com/openrung/openrung
+          Exact upstream source commit: ${OPENRUNG_COMMIT}
+          Exact upstream source archive:
+          https://github.com/openrung/openrung/archive/${OPENRUNG_COMMIT}.tar.gz
+
+          The installed client is built from the exact upstream commit above.
+          See LICENSE and THIRD_PARTY_NOTICES.md in this directory for license
+          texts, copyright notices, third-party attributions and additional terms.
+          EOF
+
+          cp LICENSE work/luci/usr/share/licenses/luci-app-openrung/LICENSE
+          cat > work/luci/usr/share/licenses/luci-app-openrung/SOURCE-INFO.txt <<EOF
+          LuCI package source:
+          https://github.com/mengxianbo/openwrt-openrung
+          Exact packaging source commit: ${GITHUB_SHA}
+          Exact source archive:
+          https://github.com/mengxianbo/openwrt-openrung/archive/${GITHUB_SHA}.tar.gz
+          License: GPL-3.0-or-later
+          EOF
 
           cat > work/client/CONTROL/control <<EOF
           Package: openrung-client
           Version: ${VERSION}
           Architecture: x86_64
           Maintainer: OpenWrt OpenRung Community
+          License: GPL-3.0-or-later
           Description: OpenRung CLI client for OpenWrt x86_64
           EOF
 
@@ -145,6 +191,7 @@ jobs:
           Architecture: all
           Maintainer: OpenWrt OpenRung Community
           Depends: luci-base, openrung-client
+          License: GPL-3.0-or-later
           Description: Chinese LuCI management page for OpenRung
           EOF
 
@@ -293,6 +340,7 @@ jobs:
           path: |
             *.ipk
             SHA256SUMS
+            out/*-source-*.tar.gz
           if-no-files-found: error
           retention-days: 30
 
@@ -309,5 +357,6 @@ jobs:
             out/openrung-client_x86_64.ipk
             out/luci-app-openrung_all.ipk
             SHA256SUMS
+            out/*-source-*.tar.gz
           overwrite_files: true
           make_latest: true
