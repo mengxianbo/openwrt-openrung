@@ -6,6 +6,7 @@
 - `openrung-client`：从官方 OpenRung 源码编译的 Linux amd64 CLI。
 - `luci-app-openrung`：中文 LuCI CBI 配置页。
 - procd 服务：以 `connect -headless` 运行，支持开机启动、停止、崩溃重启。
+- PassWall 联动：执行 `/usr/bin/openrung-client check` 时，若 PassWall 原本正在运行则先暂停，检测结束后自动恢复；原本关闭则保持关闭。可在 LuCI 中关闭此功能或选择 PassWall / PassWall 2。
 - 节点选择：自动（不设置筛选）、国家代码、Relay ID、Relay Label。
 - 默认只启用无 TUN 的本地代理模式。TUN 当前不启用，因为目标设备没有 `/dev/net/tun`，且运行内核与软件源内核不匹配。
 
@@ -34,7 +35,7 @@ opkg install ./luci-app-openrung_*_all.ipk
 LuCI 菜单：服务 -> OpenRung。
 
 ## 使用
-在 LuCI 设置国家代码（例如 `DE`）或 Relay ID；留空则交给官方引擎自动选择。
+在 LuCI 设置国家代码（例如 `DE`）或 Relay ID；留空则交给官方引擎自动选择。PassWall 联动默认开启，需确认服务名与实际安装的 init 服务一致。
 注意：本初版的 country/id 是筛选目标，不是完整可视化节点目录。
 
 ## 兼容性

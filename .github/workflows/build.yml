@@ -76,11 +76,16 @@ jobs:
 
           mkdir -p out \
             work/client/usr/bin \
+            work/client/usr/libexec \
             work/client/etc/config \
             work/client/etc/init.d \
             work/client/CONTROL
 
           install -m 0755 openrung-client \
+            work/client/usr/libexec/openrung-client.bin
+
+          install -m 0755 \
+            package/openrung-client/openrung-client-wrapper \
             work/client/usr/bin/openrung-client
 
           install -m 0644 \
@@ -231,6 +236,9 @@ jobs:
       - name: Verify OpenWrt IPK packages
         run: |
           set -eux
+
+          sh -n package/openrung-client/openrung-client-wrapper
+          sh -n package/openrung-client/openrung.init
 
           for pkg in \
             openrung-client_${PACKAGE_VERSION}_x86_64.ipk \

@@ -39,4 +39,15 @@ function log.cfgvalue(self, section)
     return "logread -e openrung"
 end
 
+local pw_guard = s:option(Flag, "passwall_guard", translate("检测节点时暂时暂停 PassWall"))
+pw_guard.default = "1"
+pw_guard.rmempty = false
+pw_guard.description = translate("执行 openrung-client check 时暂停原本正在运行的 PassWall，检测结束后恢复；原本关闭则保持关闭。")
+
+local pw_service = s:option(Value, "passwall_service", translate("PassWall 服务名称"))
+pw_service.default = "passwall"
+pw_service:value("passwall", "PassWall")
+pw_service:value("passwall2", "PassWall 2")
+pw_service.description = translate("通常保持默认 passwall；使用 PassWall 2 时选择 passwall2。")
+
 return m

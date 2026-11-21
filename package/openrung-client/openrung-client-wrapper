@@ -1,0 +1,79 @@
+#!/bin/sh
+# Intercept OpenRung node checks so PassWall does not compete with the probe.
+# All non-check commands are passed through unchanged.
+
+REAL="/usr/libexec/openrung-client.bin"
+[ -x "$REAL" ] || {
+    echo "OpenRung binary missing: $REAL" >&2
+    exit 127
+}
+
+[ "${1:-}" = "check" ] || exec "$REAL" "$@"
+
+. /lib/functions.sh
+
+config_load openrung
+config_get_bool guard main passwall_guard 1
+config_get service main passwall_service "passwall"
+
+[ "$guard" = "1" ] || exec "$REAL" "$@"
+
+case "$service" in
+    ""|*[!A-Za-z0-9_-]*)
+        logger -t openrung "Invalid PassWall service name; running check without pause"
+        exec "$REAL" "$@"
+        ;;
+esac
+
+INIT="/etc/init.d/$service"
+[ -x "$INIT" ] || {
+    logger -t openrung "PassWall service $service not found; running check without pause"
+    exec "$REAL" "$@"
+}
+
+# Detect the actual procd instance state. Never start a service that was already stopped.
+was_running=0
+if ubus call service list "{\"name\":\"$service\"}" 2>/dev/null |
+    grep -q '"running"[[:space:]]*:[[:space:]]*true'; then
+    was_running=1
+fi
+
+[ "$was_running" = "1" ] || exec "$REAL" "$@"
+
+LOCK="/var/run/openrung-passwall-check.lock"
+if ! mkdir "$LOCK" 2>/dev/null; then
+    logger -t openrung "Another protected check is active; waiting for its lock"
+    n=0
+    while [ -d "$LOCK" ] && [ "$n" -lt 30 ]; do
+        sleep 1
+        n=$((n + 1))
+    done
+    if [ -d "$LOCK" ]; then
+        logger -t openrung "PassWall check lock timed out"
+        exit 1
+    fi
+    exec "$0" "$@"
+fi
+
+restore_passwall() {
+    if [ "$was_running" = "1" ]; then
+        logger -t openrung "Restoring PassWall after OpenRung check"
+        "$INIT" start
+    fi
+    rmdir "$LOCK" 2>/dev/null
+}
+trap restore_passwall EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+
+logger -t openrung "Pausing $service for OpenRung node check"
+if ! "$INIT" stop; then
+    logger -t openrung "Could not stop $service; aborting protected check"
+    exit 1
+fi
+sleep 2
+
+"$REAL" "$@"
+rc=$?
+exit "$rc"
