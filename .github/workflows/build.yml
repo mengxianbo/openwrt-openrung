@@ -108,7 +108,7 @@ jobs:
               package/openrung-client/openrung.config \
               "work/$PACKAGE_ARCH/etc/config/openrung"
 
-            printf '/etc/config/openrung\\n' > "work/$PACKAGE_ARCH/CONTROL/conffiles"
+            printf '%s\n' '/etc/config/openrung' > "work/$PACKAGE_ARCH/CONTROL/conffiles"
 
             install -m 0755 \
               package/openrung-client/openrung.init \
@@ -185,7 +185,7 @@ jobs:
                   tmp = Path(tmpdir)
                   make_tar_gz(source / "CONTROL", tmp / "control.tar.gz")
                   make_tar_gz(source, tmp / "data.tar.gz", exclude_control=True)
-                  (tmp / "debian-binary").write_text("2.0\\n", encoding="ascii")
+                  (tmp / "debian-binary").write_text("2.0" + chr(10), encoding="ascii")
                   with tarfile.open(output, "w:gz", format=tarfile.GNU_FORMAT) as tar:
                       tar.add(tmp / "debian-binary", arcname="./debian-binary")
                       tar.add(tmp / "data.tar.gz", arcname="./data.tar.gz")
