@@ -1,4 +1,4 @@
-name: OpenRung #24 Source Distribution
+name: "OpenRung #24 Source Distribution"
 
 on:
   workflow_dispatch:
@@ -68,7 +68,7 @@ jobs:
 
           (
             cd dist
-            sha256sum ./*.tar.gz ./*.txt ./*.md > SHA256SUMS-SOURCE
+            sha256sum ./* > SHA256SUMS-SOURCE
             sha256sum SHA256SUMS-SOURCE > SHA256SUMS-SOURCE.sha256
           )
           echo "SOURCE_DIST_DIR=dist" >> "$GITHUB_ENV"
