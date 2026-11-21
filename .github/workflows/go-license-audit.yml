@@ -104,7 +104,7 @@ jobs:
           set -euo pipefail
           mkdir -p ../license-audit
           go version | tee ../license-audit/go-version.txt
-          printf '%s\\n' "$UPSTREAM_COMMIT" > ../license-audit/upstream-commit.txt
+          printf '%s\n' "$UPSTREAM_COMMIT" > ../license-audit/upstream-commit.txt
           go list -mod=readonly -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./cmd/client |
             sed '/^$/d' | sort -u > ../license-audit/compiled-go-packages.txt
           go list -mod=readonly -m all > ../license-audit/go-module-graph.txt
