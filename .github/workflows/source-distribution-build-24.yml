@@ -1,0 +1,104 @@
+name: "OpenRung #24 Corresponding Source"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-distribution:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout current main with history
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.5"
+          cache: false
+
+      - name: Build isolated #24 source package
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGING_COMMIT="ea2385243c93440fcede94923a7f83477d27af70"
+          UPSTREAM_COMMIT="5cba4f0b9da642dcc9cc1904f861eb1d59c23a04"
+
+          git cat-file -e "${PACKAGING_COMMIT}^{commit}"
+          mkdir -p dist upstream-work
+
+          git archive --format=tar "${PACKAGING_COMMIT}" |
+            gzip -n > "dist/openwrt-openrung-packaging-source-${PACKAGING_COMMIT}.tar.gz"
+
+          git clone --no-checkout https://github.com/openrung/openrung.git upstream-work/repo
+          git -C upstream-work/repo fetch --depth 1 origin "${UPSTREAM_COMMIT}"
+          git -C upstream-work/repo checkout --detach "${UPSTREAM_COMMIT}"
+          test "$(git -C upstream-work/repo rev-parse HEAD)" = "${UPSTREAM_COMMIT}"
+
+          cd upstream-work/repo
+          go version
+          test -s go.mod
+          test -s go.sum
+          go mod vendor
+          test -s vendor/modules.txt
+          test -s LICENSE
+          test -s THIRD_PARTY_NOTICES.md
+          MODULE_COUNT="$(grep -c '^# ' vendor/modules.txt || true)"
+          LICENSE_COUNT="$(find vendor -type f \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) | wc -l)"
+          test "${MODULE_COUNT}" -gt 0
+          test "${LICENSE_COUNT}" -gt 0
+          go list -mod=vendor ./... >/dev/null
+          cd ../..
+
+          tar --exclude=.git -czf "dist/openrung-upstream-source-${UPSTREAM_COMMIT}-with-vendor.tar.gz" -C upstream-work/repo .
+
+          cp upstream-work/repo/LICENSE dist/OPENRUNG-UPSTREAM-LICENSE
+          cp upstream-work/repo/THIRD_PARTY_NOTICES.md dist/OPENRUNG-THIRD-PARTY-NOTICES.md
+          cp LICENSES.md dist/LICENSES.md
+          cp SOURCE-DISTRIBUTION.md dist/SOURCE-DISTRIBUTION.md
+
+          cat > dist/SOURCE-MANIFEST.txt <<EOF
+          OpenRung stable Build #24 corresponding source distribution
+          Historical Actions run: 44885434847
+          Historical build commit: ${PACKAGING_COMMIT}
+          Packaging source: https://github.com/mengxianbo/openwrt-openrung
+          Packaging commit: ${PACKAGING_COMMIT}
+          Upstream source: https://github.com/openrung/openrung
+          Upstream commit: ${UPSTREAM_COMMIT}
+          Upstream source archive includes the exact upstream tree and vendor/ dependency source.
+          Go toolchain: $(go version)
+          Vendored module entries: ${MODULE_COUNT}
+          Vendor license/notice files found: ${LICENSE_COUNT}
+          The original #24 IPK files, hashes, release assets, and historical run are not modified.
+          EOF
+
+          (
+            cd dist
+            sha256sum ./* > SHA256SUMS-SOURCE
+            sha256sum SHA256SUMS-SOURCE > SHA256SUMS-SOURCE.sha256
+          )
+
+      - name: Verify source archive and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -c SHA256SUMS-SOURCE
+          sha256sum -c SHA256SUMS-SOURCE.sha256
+          tar -tzf openwrt-openrung-packaging-source-ea2385243c93440fcede94923a7f83477d27af70.tar.gz >/dev/null
+          tar -tzf openrung-upstream-source-5cba4f0b9da642dcc9cc1904f861eb1d59c23a04-with-vendor.tar.gz >/dev/null
+          grep -q "ea2385243c93440fcede94923a7f83477d27af70" SOURCE-MANIFEST.txt
+          grep -q "5cba4f0b9da642dcc9cc1904f861eb1d59c23a04" SOURCE-MANIFEST.txt
+
+      - name: Upload separate source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openrung-build-24-corresponding-source
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 90
