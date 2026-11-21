@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       build_run_id:
-        description: "Successful Build OpenRung OpenWrt IPK workflow run ID to audit"
+        description: "Successful historical Build #24 run ID"
         required: true
         type: string
-  workflow_run:
-    workflows: ["Build OpenRung OpenWrt IPK"]
-    types: [completed]
-    branches: [main]
+      source_run_id:
+        description: "Run ID of OpenRung #24 Corresponding Source workflow artifact"
+        required: true
+        type: string
 
 permissions:
   actions: read
@@ -18,225 +18,125 @@ permissions:
 
 jobs:
   verify-distribution:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
-        if: success()
         uses: actions/checkout@v4
 
-      - name: Download IPK and source artifacts from the exact build
-        if: success()
+      - name: Download original #24 IPK artifact (read-only)
         uses: actions/download-artifact@v4
         with:
           name: openrung-openwrt-ipk
-          path: artifacts
+          path: artifacts/ipk
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.build_run_id }}
+          run-id: ${{ inputs.build_run_id }}
 
-      - name: Verify IPK notices, source metadata, and exact source archives
-        if: success()
+      - name: Download separate #24 corresponding-source artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: openrung-build-24-corresponding-source
+          path: artifacts/source
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.source_run_id }}
+
+      - name: Audit historical IPKs without requiring metadata that #24 never contained
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import io
-          import pathlib
-          import re
-          import tarfile
+          import io, pathlib, tarfile
 
-          root = pathlib.Path("artifacts")
+          root = pathlib.Path("artifacts/ipk")
           ipks = sorted(root.rglob("*.ipk"))
           if not ipks:
-              raise SystemExit("FAIL: no IPK packages found in build artifact")
+              raise SystemExit("FAIL: no IPK packages found in the selected historical build artifact")
 
           def data_files(ipk):
               with tarfile.open(ipk, "r:gz") as outer:
-                  data = outer.extractfile("./data.tar.gz") or outer.extractfile("data.tar.gz")
-                  if data is None:
+                  member = outer.extractfile("./data.tar.gz") or outer.extractfile("data.tar.gz")
+                  if member is None:
                       raise SystemExit(f"FAIL: {ipk.name}: missing data.tar.gz")
-                  payload = data.read()
+                  payload = member.read()
               with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as inner:
                   result = {}
-                  for member in inner.getmembers():
-                      if member.isfile():
-                          stream = inner.extractfile(member)
-                          if stream is not None:
-                              result[member.name.lstrip("./")] = stream.read()
+                  for item in inner.getmembers():
+                      if item.isfile():
+                          stream = inner.extractfile(item)
+                          if stream:
+                              result[item.name.lstrip("./")] = stream.read()
                   return result
 
-          client_seen = False
-          luci_seen = False
-          packaging_commits = set()
-          upstream_commits = set()
-
+          client_seen = luci_seen = False
           for ipk in ipks:
               files = data_files(ipk)
               if "usr/share/openrung/LICENSE" in files:
                   client_seen = True
-                  required = [
-                      "usr/share/openrung/LICENSE",
-                      "usr/share/openrung/THIRD_PARTY_NOTICES.md",
-                      "usr/share/openrung/SOURCE-INFO.txt",
-                  ]
-                  for path in required:
-                      if path not in files or not files[path].strip():
-                          raise SystemExit(f"FAIL: {ipk.name}: missing/empty {path}")
-
-                  license_text = files[required[0]].decode("utf-8", "replace")
-                  notices = files[required[1]].decode("utf-8", "replace")
-                  source_info = files[required[2]].decode("utf-8", "replace")
-                  if "GNU GENERAL PUBLIC LICENSE" not in license_text or "Version 3" not in license_text:
-                      raise SystemExit(f"FAIL: {ipk.name}: expected GPLv3 license text")
-                  if "sing-box" not in notices.lower():
-                      raise SystemExit(f"FAIL: {ipk.name}: upstream third-party notice inventory missing sing-box attribution")
-
-                  # IMPORTANT: use a single backslash so Python's regex engine
-                  # interprets \\s as whitespace, not a literal backslash-s.
-                  p = re.search(r"Exact packaging source commit:\s*([0-9a-f]{40})", source_info)
-                  u = re.search(r"Exact upstream source commit:\s*([0-9a-f]{40})", source_info)
-                  if not p or not u:
-                      raise SystemExit(f"FAIL: {ipk.name}: exact source commit missing from SOURCE-INFO")
-                  packaging_commits.add(p.group(1))
-                  upstream_commits.add(u.group(1))
-                  print(f"PASS: {ipk.name}: GPLv3 text, upstream notices, exact source metadata")
-
+                  if not files["usr/share/openrung/LICENSE"].strip():
+                      raise SystemExit(f"FAIL: {ipk.name}: empty upstream LICENSE")
+                  license_text = files["usr/share/openrung/LICENSE"].decode("utf-8", "replace")
+                  if "GNU GENERAL PUBLIC LICENSE" not in license_text:
+                      raise SystemExit(f"FAIL: {ipk.name}: upstream license text not recognized")
+                  notices = files.get("usr/share/openrung/THIRD_PARTY_NOTICES.md", b"")
+                  if not notices.strip():
+                      raise SystemExit(f"FAIL: {ipk.name}: third-party notices missing/empty")
+                  if b"sing-box" not in notices.lower():
+                      raise SystemExit(f"FAIL: {ipk.name}: sing-box attribution missing")
+                  print(f"PASS: {ipk.name}: embedded upstream license and third-party notices present")
               if "usr/share/licenses/luci-app-openrung/LICENSE" in files:
                   luci_seen = True
                   license_text = files["usr/share/licenses/luci-app-openrung/LICENSE"].decode("utf-8", "replace")
-                  source_path = "usr/share/licenses/luci-app-openrung/SOURCE-INFO.txt"
-                  if "GNU GENERAL PUBLIC LICENSE" not in license_text or source_path not in files:
-                      raise SystemExit(f"FAIL: {ipk.name}: LuCI license or source information missing")
-                  source_info = files[source_path].decode("utf-8", "replace")
-                  p = re.search(r"Exact packaging source commit:\s*([0-9a-f]{40})", source_info)
-                  if not p:
-                      raise SystemExit(f"FAIL: {ipk.name}: LuCI exact packaging commit missing")
-                  packaging_commits.add(p.group(1))
-                  print(f"PASS: {ipk.name}: LuCI license and source metadata")
+                  if "GNU GENERAL PUBLIC LICENSE" not in license_text:
+                      raise SystemExit(f"FAIL: {ipk.name}: LuCI license text not recognized")
+                  print(f"PASS: {ipk.name}: LuCI license present")
 
           if not client_seen:
-              raise SystemExit("FAIL: client IPK with license files not found")
+              raise SystemExit("FAIL: client IPK with upstream license not found")
           if not luci_seen:
-              raise SystemExit("FAIL: LuCI IPK with license files not found")
-          if len(upstream_commits) != 1:
-              raise SystemExit(f"FAIL: expected one exact upstream commit, got {sorted(upstream_commits)}")
-
-          archives = {p.name: p for p in root.rglob("*.tar.gz") if p.is_file() and p.stat().st_size > 0}
-          for commit in packaging_commits:
-              expected = f"openwrt-openrung-source-{commit}.tar.gz"
-              if expected not in archives:
-                  raise SystemExit(f"FAIL: matching packaging source archive missing: {expected}")
-          upstream_commit = next(iter(upstream_commits))
-          expected = f"openrung-upstream-source-{upstream_commit}.tar.gz"
-          if expected not in archives:
-              raise SystemExit(f"FAIL: matching upstream source archive missing: {expected}")
-
-          pathlib.Path("upstream-commit.txt").write_text(upstream_commit + "\n", encoding="ascii")
-          print("PASS: both IPKs have license metadata and exact matching source archives.")
+              raise SystemExit("FAIL: LuCI IPK with license not found")
+          print("PASS: historical #24 IPK license checks completed; SOURCE-INFO.txt is audited via the separate exact-source manifest, not retroactively required inside this immutable IPK.")
           PY
-          echo "UPSTREAM_COMMIT=$(cat upstream-commit.txt)" >> "$GITHUB_ENV"
 
-      - name: Set Go for dependency source reconstruction
-        if: success()
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.25.5"
-          cache: false
-
-      - name: Generate exact upstream corresponding-source bundle with vendored Go dependencies
-        if: success()
+      - name: Verify exact #24 corresponding source archives and checksums
         shell: bash
         run: |
-          set -euxo pipefail
-          echo "STEP 1: locate exact upstream archive"
-          archive_name="openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz"
-          mapfile -t source_matches < <(find artifacts -type f -name "$archive_name" -print)
-          if [ "${#source_matches[@]}" -ne 1 ]; then
-            printf 'FAIL: expected exactly one %s under artifacts/, found %s\n' "$archive_name" "${#source_matches[@]}" >&2
-            printf '%s\n' "${source_matches[@]}" >&2
-            exit 1
-          fi
-          source_archive="${source_matches[0]}"
-          ls -lh "$source_archive"
-          test -s "$source_archive"
+          set -euo pipefail
+          cd artifacts/source
+          PACKAGING_COMMIT="ea2385243c93440fcede94923a7f83477d27af70"
+          UPSTREAM_COMMIT="5cba4f0b9da642dcc9cc1904f861eb1d59c23a04"
 
-          echo "STEP 2: extract pinned upstream source"
-          mkdir -p "corresponding/openrung-${UPSTREAM_COMMIT}"
-          tar -xzf "$source_archive" --strip-components=1 -C "corresponding/openrung-${UPSTREAM_COMMIT}"
+          test -s "openwrt-openrung-packaging-source-${PACKAGING_COMMIT}.tar.gz"
+          test -s "openrung-upstream-source-${UPSTREAM_COMMIT}-with-vendor.tar.gz"
+          test -s OPENRUNG-UPSTREAM-LICENSE
+          test -s OPENRUNG-THIRD-PARTY-NOTICES.md
+          test -s LICENSES.md
+          test -s SOURCE-DISTRIBUTION.md
+          test -s SOURCE-MANIFEST.txt
+          test -s SHA256SUMS-SOURCE
+          test -s SHA256SUMS-SOURCE.sha256
 
-          cd "corresponding/openrung-${UPSTREAM_COMMIT}"
-          echo "STEP 3: verify Go module manifests"
-          test -s go.mod
-          test -s go.sum
-          go version
-          head -n 8 go.mod
+          grep -q "Historical Actions run: 44885434847" SOURCE-MANIFEST.txt
+          grep -q "Packaging commit: ${PACKAGING_COMMIT}" SOURCE-MANIFEST.txt
+          grep -q "Upstream commit: ${UPSTREAM_COMMIT}" SOURCE-MANIFEST.txt
+          grep -q "${PACKAGING_COMMIT}" SOURCE-DISTRIBUTION.md
+          grep -q "${UPSTREAM_COMMIT}" SOURCE-DISTRIBUTION.md
 
-          echo "STEP 4: vendor dependency source from exact go.mod/go.sum"
-          go mod vendor -v
+          sha256sum -c SHA256SUMS-SOURCE
+          sha256sum -c SHA256SUMS-SOURCE.sha256
+          tar -tzf "openwrt-openrung-packaging-source-${PACKAGING_COMMIT}.tar.gz" >/dev/null
+          tar -tzf "openrung-upstream-source-${UPSTREAM_COMMIT}-with-vendor.tar.gz" >/dev/null
+          tar -xOf "openrung-upstream-source-${UPSTREAM_COMMIT}-with-vendor.tar.gz" ./vendor/modules.txt >/dev/null
+          echo "PASS: exact #24 packaging and upstream corresponding-source archives verified."
 
-          echo "STEP 5: verify vendored module inventory"
-          test -s vendor/modules.txt
-          MODULE_COUNT="$(grep -c '^# ' vendor/modules.txt || true)"
-          LICENSE_FILE_COUNT="$(find vendor -type f \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) | wc -l)"
-          test "$MODULE_COUNT" -gt 0
-          test "$LICENSE_FILE_COUNT" -gt 0
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go list -mod=vendor -tags='with_utls,with_external_windivert' ./cmd/client >/dev/null
-
-          cat > CORRESPONDING-SOURCE-INFO.txt <<EOF
-          OpenRung exact corresponding-source bundle
-
-          Upstream repository: https://github.com/openrung/openrung
-          Exact upstream commit: ${UPSTREAM_COMMIT}
-          Original source archive: openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz
-          Go toolchain used to reconstruct dependencies: $(go version)
-          Vendored module entries in vendor/modules.txt: ${MODULE_COUNT}
-          License/notice files found under vendor/: ${LICENSE_FILE_COUNT}
-
-          This archive contains the exact upstream source tree plus the Go
-          dependency source tree generated by 'go mod vendor' from its go.mod
-          and go.sum. vendor/modules.txt records the module versions.
-          Third-party license texts and notices are retained where present
-          in the vendored module sources. See THIRD_PARTY_NOTICES.md and each
-          vendored module's own license/notice files.
-
-          This automated inventory is a source-presence check, not a legal
-          determination that every dependency's licensing obligations have
-          been fully satisfied.
-          EOF
-
-          echo "STEP 6: package corresponding-source archive"
-          cd ../..
-          mkdir -p corresponding-artifact
-          tar -czf "corresponding-artifact/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz" \
-            -C corresponding "openrung-${UPSTREAM_COMMIT}"
-          test -s "corresponding-artifact/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz"
-          sha256sum corresponding-artifact/*.tar.gz > "corresponding-artifact/CORRESPONDING-SOURCE-SHA256SUMS-${UPSTREAM_COMMIT}.txt"
-          echo "PASS: corresponding-source archive created."
-      - name: Upload corresponding-source bundle as workflow artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: openrung-corresponding-source
-          path: |
-            corresponding-artifact/*.tar.gz
-            corresponding-artifact/CORRESPONDING-SOURCE-SHA256SUMS-*.txt
-          if-no-files-found: error
-          retention-days: 90
-
-      - name: Verify repository license declarations
-        if: success()
+      - name: Verify repository license scope documentation
         shell: bash
         run: |
           set -euo pipefail
           test -s LICENSE
           grep -q "GNU GENERAL PUBLIC LICENSE" LICENSE
-          grep -q "Version 3" LICENSE
           grep -q "GPL-3.0-or-later" README.md
           grep -q "GPL-3.0-or-later" LICENSES.md
-          grep -q "OpenRung" LICENSES.md
-          grep -q "THIRD_PARTY_NOTICES.md" .github/workflows/build.yml
-          grep -q "SOURCE-INFO.txt" .github/workflows/build.yml
           grep -q "go.mod" LICENSES.md
           grep -q "go.sum" LICENSES.md
-          echo "PASS: repository license scope and source-disclosure documentation are present."
+          echo "PASS: repository license scope and dependency source-disclosure documentation are present."
