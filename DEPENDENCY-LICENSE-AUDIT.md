@@ -60,7 +60,7 @@ change dependencies, rebuild or replace IPKs, or publish release assets.
 
 The preserved #24 corresponding-source artifact was inspected without
 modifying it. Its upstream `vendor/modules.txt` contains **211 module entries**
-and the vendor tree contains **216 LICENSE/COPYING/NOTICE-style files**.
+and the vendor tree contains **218 LICENSE/COPYING/NOTICE-style files**.
 This confirms that the archived dependency source tree and a substantial set
 of license texts are present. It is not the final count of modules linked into
 the Linux client: `go mod vendor` can include dependencies used by other
