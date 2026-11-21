@@ -181,7 +181,7 @@ jobs:
           LICENSE_FILE_COUNT="$(find vendor -type f \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) | wc -l)"
           test "$MODULE_COUNT" -gt 0
           test "$LICENSE_FILE_COUNT" -gt 0
-          go list -mod=vendor ./... >/dev/null
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go list -mod=vendor -tags='with_utls,with_external_windivert' ./cmd/client >/dev/null
 
           cat > CORRESPONDING-SOURCE-INFO.txt <<EOF
           OpenRung exact corresponding-source bundle
