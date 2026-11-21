@@ -1,69 +1,65 @@
-# OpenRung for OpenWrt (初版)
+# OpenRung for OpenWrt (x86_64)
 
 面向 KWRT/OpenWrt x86_64 的 OpenRung CLI + LuCI 管理包。
 
-## 当前实现边界
+## 当前实现
+
 - `openrung-client`：从官方 OpenRung 源码编译的 Linux amd64 CLI。
 - `luci-app-openrung`：中文 LuCI CBI 配置页。
-- procd 服务：以 `connect -headless` 运行，支持开机启动、停止、崩溃重启。
-- PassWall 联动：执行 `/usr/bin/openrung-client check` 时，若 PassWall 原本正在运行则先暂停，检测结束后自动恢复；原本关闭则保持关闭。可在 LuCI 中关闭此功能或选择 PassWall / PassWall 2。
-- 节点选择：自动（不设置筛选）、国家代码、Relay ID、Relay Label。
+- procd 后台服务：使用 `connect -headless`，开机启动并无限自动重启。
+- **本地代理端口固定为 `127.0.0.1:44025`**：由官方客户端支持的 `OPENRUNG_PROXY_PORT` 环境变量在服务启动时强制指定，不读取随机端口。
+- procd 服务显式设置 `HOME=/root` 和 `XDG_CONFIG_HOME=/root/.config`，避免精简 OpenWrt 服务环境缺少 HOME，导致 Go 客户端无法初始化用户配置目录并立即退出。
+- LuCI 状态同时检查 procd 实例和 44025 TCP 监听，不再用错误的进程命令行匹配来判断运行状态。
+- PassWall 联动：执行 `openrung-client check` 时，若 PassWall 原本正在运行则先暂停，检测结束后自动恢复；原本关闭则保持关闭。
 - 默认只启用无 TUN 的本地代理模式。TUN 当前不启用，因为目标设备没有 `/dev/net/tun`，且运行内核与软件源内核不匹配。
 
-## 重要说明
-OpenRung 当前 CLI 的 headless 模式使用 `connect -headless`，可传入 `-relay-id`、`-relay-label`、`-relay-country`。
-CLI 的代理监听地址/端口由官方连接引擎管理；此包不伪造端口设置，也不将其硬编码为 40333。连接后请以 `logread -e openrung`、`ps` 和 `ss -lntp` 核实实际监听端口。
-此初版未实现从官方目录读取完整节点列表并在 LuCI 中展示测速排名；网页端通过 Relay ID / 国家 / 标签进行筛选。后续要做实时节点表，需要官方目录 API 的数据结构及 UI 接口适配。
-
 ## GitHub Actions 构建
-1. 将整个目录内容上传到自己的 GitHub 仓库。
-2. Actions -> `Build OpenRung OpenWrt IPK` -> Run workflow。
-3. 构建完成后在 Actions 的 Artifacts 下载 `openrung-openwrt-ipk`。
-4. 包含：
-   - `openrung-client_*_x86_64.ipk`
-   - `luci-app-openrung_*_all.ipk`
 
-Workflow 从官方 `openrung/openrung` main 分支拉取源码，使用 Go 1.25.5 编译；建议正式部署前将 `OPENRUNG_REF` 固定到经过验证的 tag 或 commit。
+1. Actions -> `Build OpenRung OpenWrt IPK` -> Run workflow。
+2. 构建完成后在 Actions 的 Artifacts 下载 `openrung-openwrt-ipk`。
+3. 也会发布到 Release：`openwrt-latest`。
+
+Workflow 从官方 `openrung/openrung` main 分支拉取源码，使用 Go 1.25.5 编译；正式部署前建议将 `OPENRUNG_REF` 固定到经过验证的 tag 或 commit。
 
 ## 安装
 
-
-1. 下载 OpenRung 客户端
+```sh
 cd /tmp
+wget -O openrung-client.ipk https://github.com/mengxianbo/openwrt-openrung/releases/latest/download/openrung-client_x86_64.ipk
+wget -O luci-app-openrung.ipk https://github.com/mengxianbo/openwrt-openrung/releases/latest/download/luci-app-openrung_all.ipk
 
-wget -O openrung-client.ipk \
-https://github.com/mengxianbo/openwrt-openrung/releases/latest/download/openrung-client_x86_64.ipk
-
-
-2. 下载 LuCI 管理界面
-wget -O luci-app-openrung.ipk \
-https://github.com/mengxianbo/openwrt-openrung/releases/latest/download/luci-app-openrung_all.ipk
-
-
-3. 安装
 opkg install ./openrung-client.ipk
 opkg install ./luci-app-openrung.ipk
 
-
-4. 设置本地监听端口为 44025，并开启开机自启
+# 启用服务并固定代理端口
 uci set openrung.main.enabled='1'
+uci set openrung.main.mode='proxy'
 uci set openrung.main.proxy_port='44025'
 uci set openrung.main.passwall_guard='1'
 uci commit openrung
 
 /etc/init.d/openrung enable
 /etc/init.d/openrung restart
+sleep 3
 
-
-5. 检查运行状态
 /etc/init.d/openrung status
-logread | grep -i openrung | tail -30
-netstat -lnpt 2>/dev/null | grep 44025
+ubus call service list '{"name":"openrung"}'
+ss -lntp 2>/dev/null | grep ':44025' || netstat -lnpt 2>/dev/null | grep ':44025'
+logread -e openrung | tail -50
+```
 
+## 运行验收
 
-## 使用
-在 LuCI 设置国家代码（例如 `DE`）或 Relay ID；留空则交给官方引擎自动选择。PassWall 联动默认开启，需确认服务名与实际安装的 init 服务一致。
-注意：本初版的 country/id 是筛选目标，不是完整可视化节点目录。
+必须同时满足：
 
-## 兼容性
-目标设备显示 x86_64，但运行内核 `6.2.16-3-pve`，软件源指向 KWRT 25.12 内核目录 `6.12.94`。因此客户端作为 Go 静态用户态程序编译，不包含内核模块；TUN 默认关闭。该 IPK 尚未在你的实际路由器上安装验证。
+1. `ubus call service list '{"name":"openrung"}'` 中 OpenRung 实例为 `running: true`。
+2. `ss -lntp` 或 `netstat -lnpt` 显示 `127.0.0.1:44025` 正在监听。
+3. `/etc/init.d/openrung enabled` 返回成功。
+4. 重启路由器后仍自动启动并监听 44025。
+
+## 说明
+
+- 端口只绑定 IPv4 回环地址 `127.0.0.1`，不会向 LAN 暴露无认证代理。
+- procd 使用 `respawn 3600 5 0`：短时间反复崩溃也会每隔 5 秒持续重启，不会因默认 5 次重试后永久停止。
+- 如果 44025 已被其他程序占用，OpenRung 会报告端口冲突；请先释放该端口，不会自动换端口。
+- 节点筛选支持国家代码、Relay ID、Relay Label；全部留空时由官方引擎自动选择。

@@ -1,6 +1,6 @@
 local sys = require "luci.sys"
 
-local m = Map("openrung", translate("OpenRung"), translate("管理 OpenRung 本地代理。当前版本默认使用无 TUN 权限要求的代理模式。"))
+local m = Map("openrung", translate("OpenRung"), translate("管理 OpenRung 本地代理。固定监听 127.0.0.1:44025，由 procd 在后台持续守护。"))
 local s = m:section(NamedSection, "main", "openrung", translate("连接设置"))
 s.addremove = false
 
@@ -22,22 +22,27 @@ local rid = s:option(Value, "relay_id", translate("指定 Relay ID"))
 rid.placeholder = "relay_xxxxx"
 rid.description = translate("填写后优先按精确 Relay ID 连接；留空则不限制 ID。")
 
-local proxy_port = s:option(Value, "proxy_port", translate("本地监听端口"))
-proxy_port.datatype = "port"
-proxy_port.default = "44025"
-proxy_port.placeholder = "44025"
-proxy_port.rmempty = false
-proxy_port.description = translate("OpenRung 本地 HTTP / SOCKS5 混合代理监听端口，仅绑定本机回环地址。默认 44025。")
+local fixed_port = s:option(DummyValue, "_fixed_proxy_port", translate("固定本地监听端口"))
+function fixed_port.cfgvalue(self, section)
+    return "127.0.0.1:44025（固定，不允许随机分配）"
+end
 
 local label = s:option(Value, "relay_label", translate("节点标签"))
 label.placeholder = "Germany"
 label.description = translate("可选筛选条件；建议 Relay ID、国家代码、标签三者只设置一个。")
 
 local status = s:option(DummyValue, "_status", translate("服务状态"))
-status.rawhtml = true
+status.rawhtml = false
 function status.cfgvalue(self, section)
-    local running = (sys.call("pgrep -f '/usr/bin/openrung-client connect' >/dev/null 2>&1") == 0)
-    return running and translate("运行中（请检查日志确认已成功连接）") or translate("未运行")
+    local service_running = (sys.call("ubus call service list '{\"name\":\"openrung\"}' 2>/dev/null | grep -q '\"running\"[[:space:]]*:[[:space:]]*true'") == 0)
+    local listening = (sys.call("(ss -lnt 2>/dev/null || netstat -lnt 2>/dev/null) | grep -Eq '127\\.0\\.0\\.1:44025([[:space:]]|$)'") == 0)
+
+    if listening then
+        return translate("运行正常：127.0.0.1:44025 正在监听")
+    elseif service_running then
+        return translate("进程运行中，但 44025 尚未监听；请检查连接日志")
+    end
+    return translate("未运行：请检查启用开关和系统日志")
 end
 
 local log = s:option(DummyValue, "_log", translate("查看日志命令"))
