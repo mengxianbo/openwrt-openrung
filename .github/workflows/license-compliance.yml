@@ -8,7 +8,7 @@ on:
 
 permissions:
   actions: read
-  contents: read
+  contents: write
 
 jobs:
   verify-distribution:
@@ -29,13 +29,12 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         uses: actions/checkout@v4
 
-      - name: Verify published IPK license files and corresponding source archives
+      - name: Verify IPK notices, source metadata, and exact source archives
         if: github.event_name == 'workflow_run'
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import gzip
           import io
           import pathlib
           import re
@@ -46,25 +45,20 @@ jobs:
           if not ipks:
               raise SystemExit("FAIL: no IPK packages found in build artifact")
 
-          def read_member_tar(data, member):
-              with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
-                  try:
-                      return tf.extractfile(member).read()
-                  except (KeyError, AttributeError):
-                      raise SystemExit(f"FAIL: missing {member}")
-
           def data_files(ipk):
               with tarfile.open(ipk, "r:gz") as outer:
-                  data = outer.extractfile("./data.tar.gz")
-                  if data is None:
-                      data = outer.extractfile("data.tar.gz")
+                  data = outer.extractfile("./data.tar.gz") or outer.extractfile("data.tar.gz")
                   if data is None:
                       raise SystemExit(f"FAIL: {ipk.name}: missing data.tar.gz")
                   payload = data.read()
               with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as inner:
-                  return {m.name.lstrip("./"): inner.extractfile(m).read()
-                          for m in inner.getmembers()
-                          if m.isfile() and inner.extractfile(m) is not None}
+                  result = {}
+                  for member in inner.getmembers():
+                      if member.isfile():
+                          stream = inner.extractfile(member)
+                          if stream is not None:
+                              result[member.name.lstrip("./")] = stream.read()
+                  return result
 
           client_seen = False
           luci_seen = False
@@ -83,56 +77,158 @@ jobs:
                   for path in required:
                       if path not in files or not files[path].strip():
                           raise SystemExit(f"FAIL: {ipk.name}: missing/empty {path}")
+
                   license_text = files[required[0]].decode("utf-8", "replace")
                   notices = files[required[1]].decode("utf-8", "replace")
                   source_info = files[required[2]].decode("utf-8", "replace")
-                  if "GNU GENERAL PUBLIC LICENSE" not in license_text:
-                      raise SystemExit(f"FAIL: {ipk.name}: LICENSE is not a GNU GPL text")
-                  if len(notices.strip()) < 20:
-                      raise SystemExit(f"FAIL: {ipk.name}: third-party notices look empty")
-                  p = re.search(r"Exact packaging source commit:\\s*([0-9a-f]{40})", source_info)
-                  u = re.search(r"Exact upstream source commit:\\s*([0-9a-f]{40})", source_info)
+                  if "GNU GENERAL PUBLIC LICENSE" not in license_text or "Version 3" not in license_text:
+                      raise SystemExit(f"FAIL: {ipk.name}: expected GPLv3 license text")
+                  if "sing-box" not in notices.lower():
+                      raise SystemExit(f"FAIL: {ipk.name}: upstream third-party notice inventory missing sing-box attribution")
+
+                  # IMPORTANT: use a single backslash so Python's regex engine
+                  # interprets \\s as whitespace, not a literal backslash-s.
+                  p = re.search(r"Exact packaging source commit:\s*([0-9a-f]{40})", source_info)
+                  u = re.search(r"Exact upstream source commit:\s*([0-9a-f]{40})", source_info)
                   if not p or not u:
                       raise SystemExit(f"FAIL: {ipk.name}: exact source commit missing from SOURCE-INFO")
                   packaging_commits.add(p.group(1))
                   upstream_commits.add(u.group(1))
-                  print(f"PASS: {ipk.name}: GPL text, third-party notices, source metadata")
+                  print(f"PASS: {ipk.name}: GPLv3 text, upstream notices, exact source metadata")
+
               if "usr/share/licenses/luci-app-openrung/LICENSE" in files:
                   luci_seen = True
                   license_text = files["usr/share/licenses/luci-app-openrung/LICENSE"].decode("utf-8", "replace")
-                  if "GNU GENERAL PUBLIC LICENSE" not in license_text:
-                      raise SystemExit(f"FAIL: {ipk.name}: LuCI GPL license text invalid")
-                  if "usr/share/licenses/luci-app-openrung/SOURCE-INFO.txt" not in files:
-                      raise SystemExit(f"FAIL: {ipk.name}: LuCI source information missing")
+                  source_path = "usr/share/licenses/luci-app-openrung/SOURCE-INFO.txt"
+                  if "GNU GENERAL PUBLIC LICENSE" not in license_text or source_path not in files:
+                      raise SystemExit(f"FAIL: {ipk.name}: LuCI license or source information missing")
+                  source_info = files[source_path].decode("utf-8", "replace")
+                  p = re.search(r"Exact packaging source commit:\s*([0-9a-f]{40})", source_info)
+                  if not p:
+                      raise SystemExit(f"FAIL: {ipk.name}: LuCI exact packaging commit missing")
+                  packaging_commits.add(p.group(1))
                   print(f"PASS: {ipk.name}: LuCI license and source metadata")
 
           if not client_seen:
-              raise SystemExit("FAIL: client IPK with /usr/share/openrung license files not found")
+              raise SystemExit("FAIL: client IPK with license files not found")
           if not luci_seen:
-              raise SystemExit("FAIL: LuCI IPK with packaged license not found")
+              raise SystemExit("FAIL: LuCI IPK with license files not found")
+          if len(upstream_commits) != 1:
+              raise SystemExit(f"FAIL: expected one exact upstream commit, got {sorted(upstream_commits)}")
 
-          archives = [p for p in root.rglob("*.tar.gz") if p.is_file() and p.stat().st_size > 0]
-          names = {p.name for p in archives}
+          archives = {p.name: p for p in root.rglob("*.tar.gz") if p.is_file() and p.stat().st_size > 0}
           for commit in packaging_commits:
               expected = f"openwrt-openrung-source-{commit}.tar.gz"
-              if expected not in names:
+              if expected not in archives:
                   raise SystemExit(f"FAIL: matching packaging source archive missing: {expected}")
-          for commit in upstream_commits:
-              expected = f"openrung-upstream-source-{commit}.tar.gz"
-              if expected not in names:
-                  raise SystemExit(f"FAIL: matching upstream source archive missing: {expected}")
+          upstream_commit = next(iter(upstream_commits))
+          expected = f"openrung-upstream-source-{upstream_commit}.tar.gz"
+          if expected not in archives:
+              raise SystemExit(f"FAIL: matching upstream source archive missing: {expected}")
 
-          print("PASS: both IPKs include license metadata and exact matching source archives.")
+          pathlib.Path("upstream-commit.txt").write_text(upstream_commit + "\\n", encoding="ascii")
+          print("PASS: both IPKs have license metadata and exact matching source archives.")
           PY
+          echo "UPSTREAM_COMMIT=$(cat upstream-commit.txt)" >> "$GITHUB_ENV"
 
-      - name: Verify repository license declaration (manual run)
+      - name: Set Go for dependency source reconstruction
+        if: github.event_name == 'workflow_run'
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.5"
+          cache: false
+
+      - name: Generate exact upstream corresponding-source bundle with vendored Go dependencies
+        if: github.event_name == 'workflow_run'
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_archive="artifacts/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz"
+          test -s "$source_archive"
+
+          mkdir -p corresponding/openrung-${UPSTREAM_COMMIT}
+          tar -xzf "$source_archive" --strip-components=1 -C corresponding/openrung-${UPSTREAM_COMMIT}
+
+          cd corresponding/openrung-${UPSTREAM_COMMIT}
+          test -s go.mod
+          test -s go.sum
+          go mod vendor
+          test -s vendor/modules.txt
+
+          # Confirm the same client package and build tags resolve entirely
+          # from the vendored source tree, without relying on the module cache.
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go list -mod=vendor -tags 'with_utls,with_external_windivert' -deps ./cmd/client >/dev/null
+
+          MODULE_COUNT="$(grep -c '^# ' vendor/modules.txt || true)"
+          LICENSE_FILE_COUNT="$(find vendor -type f \\( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \\) | wc -l)"
+          test "$MODULE_COUNT" -gt 0
+          test "$LICENSE_FILE_COUNT" -gt 0
+
+          cat > CORRESPONDING-SOURCE-INFO.txt <<EOF
+          OpenRung exact corresponding-source bundle
+
+          Upstream repository: https://github.com/openrung/openrung
+          Exact upstream commit: ${UPSTREAM_COMMIT}
+          Original source archive: openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz
+          Go toolchain used to reconstruct dependencies: $(go version)
+          Vendored module entries in vendor/modules.txt: ${MODULE_COUNT}
+          License/notice files found under vendor/: ${LICENSE_FILE_COUNT}
+
+          This archive contains the exact upstream source tree plus the Go
+          dependency source tree generated by 'go mod vendor' from its go.mod
+          and go.sum. vendor/modules.txt records the module versions.
+          Third-party license texts and notices are retained where present
+          in the vendored module sources. See THIRD_PARTY_NOTICES.md and each
+          vendored module's own license/notice files.
+
+          This automated inventory is a source-presence check, not a legal
+          determination that every dependency's licensing obligations have
+          been fully satisfied.
+          EOF
+
+          cd ../..
+          mkdir -p corresponding-artifact
+          tar -czf "corresponding-artifact/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz" \
+            -C corresponding "openrung-${UPSTREAM_COMMIT}"
+          test -s "corresponding-artifact/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz"
+          sha256sum corresponding-artifact/*.tar.gz > corresponding-artifact/SHA256SUMS
+
+      - name: Upload corresponding-source bundle as workflow artifact
+        if: github.event_name == 'workflow_run'
+        uses: actions/upload-artifact@v4
+        with:
+          name: openrung-corresponding-source
+          path: |
+            corresponding-artifact/*.tar.gz
+            corresponding-artifact/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish corresponding-source bundle alongside the matching IPK release
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload openwrt-latest \
+            "corresponding-artifact/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz" \
+            "corresponding-artifact/SHA256SUMS" --clobber
+
+      - name: Verify repository license declarations (manual run)
         if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           set -euo pipefail
           test -s LICENSE
           grep -q "GNU GENERAL PUBLIC LICENSE" LICENSE
+          grep -q "Version 3" LICENSE
           grep -q "GPL-3.0-or-later" README.md
+          grep -q "GPL-3.0-or-later" LICENSES.md
+          grep -q "OpenRung" LICENSES.md
           grep -q "THIRD_PARTY_NOTICES.md" .github/workflows/build.yml
           grep -q "SOURCE-INFO.txt" .github/workflows/build.yml
-          echo "PASS: repository license declaration and build packaging hooks are present."
+          grep -q "go.mod" LICENSES.md
+          grep -q "go.sum" LICENSES.md
+          echo "PASS: repository license scope and source-disclosure documentation are present."
