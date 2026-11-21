@@ -79,7 +79,7 @@ jobs:
 
           mkdir -p work/client/usr/share/openrung
           cp upstream/LICENSE work/client/usr/share/openrung/LICENSE
-          cp upstream/THIRD_PARTY_NOTICES.md work/client/usr/share/openrung/THIRD_PARTY_NOTICES.md
+          if [ -f upstream/THIRD_PARTY_NOTICES.md ]; then cp upstream/THIRD_PARTY_NOTICES.md work/client/usr/share/openrung/THIRD_PARTY_NOTICES.md; fi
 
           cat > work/client/CONTROL/control <<EOF
           Package: openrung-client
