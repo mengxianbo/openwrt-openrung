@@ -4,12 +4,13 @@
 
 本仓库当前构建目标为 **OpenWrt x86_64**。构建会生成两个安装包：
 
-- `openrung-client_x86_64.ipk`：OpenRung 客户端、命令包装器、UCI 默认配置和 procd 服务脚本。
+- `openrung-client_x86_64.ipk`：OpenRung 客户端、签名节点目录读取工具、命令包装器、UCI 默认配置和 procd 服务脚本。
 - `luci-app-openrung_all.ipk`：LuCI 中文管理页面。
 
 ## 功能
 
 - LuCI 页面管理 OpenRung 服务开关、运行模式、节点筛选和本地代理端口。
+- LuCI 在线节点选择器：从 OpenRung 官方签名验证目录读取节点，按国家筛选，并显示国家、城市、标签和 Relay ID，手动指定精确节点。
 - 以 OpenWrt procd 服务方式在后台运行，不依赖 SSH 会话。
 - 支持开机启动及进程异常退出后自动拉起（procd respawn）。
 - 默认使用 Proxy 模式，默认本地代理端口配置为 **44025**。
@@ -95,13 +96,13 @@ opkg install --force-reinstall ./luci-app-openrung_all.ipk
 | 启用服务 | 0 | 是否由 procd 启动后台客户端；安装命令会设为 1 |
 | 运行模式 | proxy | 当前构建只支持 Proxy |
 | 节点国家代码 | 空 | 例如 DE、US、SG；留空不限制 |
-| 指定 Relay ID | 空 | 可指定一个 Relay ID |
+| 手动选择节点 | 自动选择 | 从在线目录选择精确 Relay ID；可先按国家筛选 |
 | 本地监听端口 | 44025 | 通过 `OPENRUNG_PROXY_PORT` 传递给客户端 |
 | 节点标签 | 空 | 可选筛选条件 |
 | 检测节点时暂时暂停 PassWall | 1 | 只在 PassWall 原本运行时暂停并在检测后恢复 |
 | PassWall 服务名称 | passwall | 可选择 passwall 或 passwall2 |
 
-节点国家代码、Relay ID、节点标签建议只设置一个筛选条件。全部留空时使用客户端默认选择逻辑。
+节点选择器会调用随客户端包安装的 `/usr/bin/openrung-relays`，通过 OpenRung 客户端使用的 broker discovery 流程获取并验证签名节点目录，不是直接信任未经验证的 JSON。先选择国家并保存/刷新页面，再从该国家的节点列表中选择具体节点；选择具体节点后后台以 Relay ID 连接。留空时由客户端自动选择。节点目录获取需要路由器能访问 OpenRung broker。
 
 ## 常用命令
 
@@ -157,7 +158,7 @@ curl -x http://127.0.0.1:44025 https://www.cloudflare.com/cdn-cgi/trace
 
 ## 构建
 
-本仓库使用 GitHub Actions 构建 IPK：
+本仓库使用 GitHub Actions 构建 IPK。工作流除编译 OpenRung 客户端外，还会编译 `openrung-relays` 节点目录辅助程序，并将其安装到客户端 IPK 的 `/usr/bin/openrung-relays`：
 
 1. 打开仓库的 **Actions** 页面。
 2. 运行 **Build OpenRung OpenWrt IPK** 工作流。
@@ -173,6 +174,7 @@ curl -x http://127.0.0.1:44025 https://www.cloudflare.com/cdn-cgi/trace
 package/
 ├── openrung-client/
 │   ├── openrung-client-wrapper   # 客户端命令包装器，处理 PassWall 检测联动
+│   ├── openrung-relays.go        # 获取并验证签名节点目录的辅助程序源码
 │   ├── openrung.config           # UCI 默认配置
 │   └── openrung.init             # procd 服务定义
 └── luci-app-openrung/
