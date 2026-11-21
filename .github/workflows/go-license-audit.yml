@@ -8,8 +8,7 @@ on:
         description: "Exact OpenRung upstream commit/ref to audit (defaults to historical #24)"
         required: false
         type: string
-        default: "5cba4f0b9da642dcc9cc1904f861eb1d59c23a04
-"
+        default: "5cba4f0b9da642dcc9cc1904f861eb1d59c23a04"
   workflow_run:
     workflows: ["Build OpenRung OpenWrt IPK"]
     types: [completed]
@@ -63,7 +62,8 @@ jobs:
           print("UPSTREAM_COMMIT=" + next(iter(found)))
           PY
           else
-            REF="${INPUT_REF:-5cba4f0b9da642dcc9cc1904f861eb1d59c23a04}"
+            REF="$(printf '%s' "${INPUT_REF:-5cba4f0b9da642dcc9cc1904f861eb1d59c23a04}" | xargs)"
+test -n "$REF"
             git init upstream
             git -C upstream remote add origin https://github.com/openrung/openrung.git
             git -C upstream fetch --depth 1 origin "$REF"
