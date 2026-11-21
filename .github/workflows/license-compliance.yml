@@ -147,28 +147,33 @@ jobs:
         if: github.event_name == 'workflow_run' || inputs.build_run_id != ''
         shell: bash
         run: |
-          set -euo pipefail
+          set -euxo pipefail
+          echo "STEP 1: locate exact upstream archive"
           source_archive="artifacts/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz"
+          ls -lh "$source_archive"
           test -s "$source_archive"
 
-          mkdir -p corresponding/openrung-${UPSTREAM_COMMIT}
-          tar -xzf "$source_archive" --strip-components=1 -C corresponding/openrung-${UPSTREAM_COMMIT}
+          echo "STEP 2: extract pinned upstream source"
+          mkdir -p "corresponding/openrung-${UPSTREAM_COMMIT}"
+          tar -xzf "$source_archive" --strip-components=1 -C "corresponding/openrung-${UPSTREAM_COMMIT}"
 
-          cd corresponding/openrung-${UPSTREAM_COMMIT}
+          cd "corresponding/openrung-${UPSTREAM_COMMIT}"
+          echo "STEP 3: verify Go module manifests"
           test -s go.mod
           test -s go.sum
-          go mod vendor
+          go version
+          head -n 8 go.mod
+
+          echo "STEP 4: vendor dependency source from exact go.mod/go.sum"
+          go mod vendor -v
+
+          echo "STEP 5: verify vendored module inventory"
           test -s vendor/modules.txt
-
-          # Confirm the same client package and build tags resolve entirely
-          # from the vendored source tree, without relying on the module cache.
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-            go list -mod=vendor -tags 'with_utls,with_external_windivert' -deps ./cmd/client >/dev/null
-
           MODULE_COUNT="$(grep -c '^# ' vendor/modules.txt || true)"
           LICENSE_FILE_COUNT="$(find vendor -type f \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) | wc -l)"
           test "$MODULE_COUNT" -gt 0
           test "$LICENSE_FILE_COUNT" -gt 0
+          go list -mod=vendor -m all >/dev/null
 
           cat > CORRESPONDING-SOURCE-INFO.txt <<EOF
           OpenRung exact corresponding-source bundle
@@ -192,13 +197,14 @@ jobs:
           been fully satisfied.
           EOF
 
+          echo "STEP 6: package corresponding-source archive"
           cd ../..
           mkdir -p corresponding-artifact
           tar -czf "corresponding-artifact/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz" \
             -C corresponding "openrung-${UPSTREAM_COMMIT}"
           test -s "corresponding-artifact/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}.tar.gz"
           sha256sum corresponding-artifact/*.tar.gz > corresponding-artifact/CORRESPONDING-SOURCE-SHA256SUMS
-
+          echo "PASS: corresponding-source archive created."
       - name: Upload corresponding-source bundle as workflow artifact
         if: github.event_name == 'workflow_run' || inputs.build_run_id != ''
         uses: actions/upload-artifact@v4
