@@ -159,8 +159,8 @@ jobs:
           set -euo pipefail
           mkdir -p dist upstream-source
 
-          test -s "artifacts/build/openwrt-openrung-source-${PACKAGING_COMMIT}.tar.gz"
-          test -s "artifacts/build/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz"
+          test -s "artifacts/build/out/openwrt-openrung-source-${PACKAGING_COMMIT}.tar.gz"
+          test -s "artifacts/build/out/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz"
           test -s artifacts/build/SHA256SUMS
 
           # Verify the package hashes before including the checksum manifest.
@@ -168,11 +168,11 @@ jobs:
 
           # Keep the exact, unmodified source snapshots separate from the
           # generated vendor-inclusive corresponding-source archive.
-          cp "artifacts/build/openwrt-openrung-source-${PACKAGING_COMMIT}.tar.gz" dist/
-          cp "artifacts/build/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz" dist/
+          cp "artifacts/build/out/openwrt-openrung-source-${PACKAGING_COMMIT}.tar.gz" dist/
+          cp "artifacts/build/out/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz" dist/
           cp artifacts/build/SHA256SUMS dist/IPK-SHA256SUMS
 
-          tar -xzf "artifacts/build/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz" \
+          tar -xzf "artifacts/build/out/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz" \
             -C upstream-source --strip-components=1
           test -s upstream-source/go.mod
           test -s upstream-source/go.sum
