@@ -22,7 +22,7 @@ endef
 define Package/luci-app-webrtc-guard/install
 	$(CP) ./root/. $(1)/
 	$(INSTALL_DIR) $(1)/usr/share/licenses/luci-app-webrtc-guard
-	$(INSTALL_DATA) $(TOPDIR)/LICENSE $(1)/usr/share/licenses/luci-app-webrtc-guard/LICENSE
+	$(INSTALL_DATA) $(CURDIR)/LICENSE $(1)/usr/share/licenses/luci-app-webrtc-guard/LICENSE
 	$(INSTALL_BIN) ./root/etc/init.d/webrtc_guard $(1)/etc/init.d/webrtc_guard
 	$(INSTALL_BIN) ./root/usr/libexec/webrtc_guard $(1)/usr/libexec/webrtc_guard
 endef
