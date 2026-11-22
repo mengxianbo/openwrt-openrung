@@ -1,0 +1,70 @@
+#!/bin/sh
+# JianxianApp WebRTC Leak Guard
+# GPL-3.0-or-later
+
+set -eu
+
+. /lib/functions.sh
+
+CONFIG_SECTION="main"
+config_load webrtc_guard
+config_get ENABLED "$CONFIG_SECTION" enabled "0"
+config_get LAN_IFACE "$CONFIG_SECTION" lan_ifname "br-lan"
+
+remove_rules() {
+	# Delete only this plugin's private nftables table.
+	nft delete table inet webrtc_guard 2>/dev/null || true
+}
+
+apply_rules() {
+	if [ "$ENABLED" != "1" ]; then
+		remove_rules
+		echo "WebRTC Leak Guard is disabled."
+		return 0
+	fi
+
+	if ! command -v nft >/dev/null 2>&1; then
+		echo "ERROR: nft command not found; install nftables." >&2
+		return 1
+	fi
+
+	# Interface names are validated before being embedded in nft syntax.
+	if ! printf '%s' "$LAN_IFACE" | grep -Eq '^[A-Za-z0-9_.:-]{1,15}$'; then
+		echo "ERROR: invalid LAN interface name: $LAN_IFACE" >&2
+		return 1
+	fi
+
+	# Replace only our own table. The nft -f transaction installs the new
+	# table and chain together; unrelated firewall4 tables are untouched.
+	remove_rules
+	nft -f - <<EOF
+table inet webrtc_guard {
+	chain forward {
+		type filter hook forward priority -5; policy accept;
+		iifname "$LAN_IFACE" udp dport { 3478, 5349, 19302-19309 } counter drop comment "webrtc-guard-known-stun-udp"
+	}
+}
+EOF
+	echo "WebRTC Leak Guard enabled on $LAN_IFACE."
+	echo "Policy: block common STUN/TURN UDP ports only; other UDP remains allowed."
+}
+
+case "${1:-}" in
+	apply)
+		apply_rules
+		;;
+	remove)
+		remove_rules
+		;;
+	status)
+		if nft list table inet webrtc_guard >/dev/null 2>&1; then
+			nft list table inet webrtc_guard
+		else
+			echo "WebRTC Leak Guard rules are not active."
+		fi
+		;;
+	*)
+		echo "Usage: $0 {apply|remove|status}" >&2
+		exit 2
+		;;
+esac
