@@ -1,0 +1,3 @@
+config webrtc_guard 'main'
+	option enabled '0'
+	option lan_ifname 'br-lan'
