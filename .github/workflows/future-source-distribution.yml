@@ -48,8 +48,8 @@ jobs:
             test "${EXPECTED_PACKAGING_COMMIT}" = "34607b91e199d41eddae261ddd9ca7362c539b62"
           fi
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${BUILD_RUN_ID}" > build-run.json
-          jq -e --arg sha "${EXPECTED_PACKAGING_COMMIT}" \\
-            '.id == 44965521571 and .workflow_id == 426399587 and .head_branch == "main" and .head_sha == $sha and .conclusion == "success"' \\
+          jq -e --arg sha "${EXPECTED_PACKAGING_COMMIT}" --arg run_id "${BUILD_RUN_ID}" \\
+            '.id == ($run_id | tonumber) and .workflow_id == 426399587 and .head_branch == "main" and .head_sha == $sha and .conclusion == "success"' \\
             build-run.json >/dev/null
           echo "run_id=${BUILD_RUN_ID}" >> "${GITHUB_OUTPUT}"
           echo "packaging_commit=${EXPECTED_PACKAGING_COMMIT}" >> "${GITHUB_OUTPUT}"
