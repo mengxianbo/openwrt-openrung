@@ -1,0 +1,78 @@
+name: Build WebRTC Leak Guard IPK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "package/luci-app-webrtc-guard/**"
+      - ".github/workflows/build-webrtc-guard.yml"
+  pull_request:
+    paths:
+      - "package/luci-app-webrtc-guard/**"
+      - ".github/workflows/build-webrtc-guard.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webrtc-guard-ipk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout isolated feature branch
+        uses: actions/checkout@v4
+
+      - name: Install validators
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 lua5.1 shellcheck
+
+      - name: Validate shell and Lua syntax
+        run: |
+          set -eux
+          sh -n package/luci-app-webrtc-guard/root/etc/init.d/webrtc_guard
+          sh -n package/luci-app-webrtc-guard/root/usr/libexec/webrtc_guard
+          shellcheck -s sh package/luci-app-webrtc-guard/root/etc/init.d/webrtc_guard package/luci-app-webrtc-guard/root/usr/libexec/webrtc_guard
+          luac5.1 -p package/luci-app-webrtc-guard/root/usr/lib/lua/luci/controller/webrtc_guard.lua
+          luac5.1 -p package/luci-app-webrtc-guard/root/usr/lib/lua/luci/model/cbi/webrtc_guard.lua
+
+      - name: Assemble standalone architecture-independent IPK
+        run: |
+          set -eux
+          PKG="package/luci-app-webrtc-guard"
+          STAGE="$RUNNER_TEMP/webrtc-guard-stage"
+          mkdir -p "$STAGE/CONTROL" "$STAGE/usr/share/licenses/luci-app-webrtc-guard"
+          cp -a "$PKG/root/." "$STAGE/"
+          install -m 0644 LICENSE "$STAGE/usr/share/licenses/luci-app-webrtc-guard/LICENSE"
+          cat > "$STAGE/CONTROL/control" <<'EOF'
+          Package: luci-app-webrtc-guard
+          Version: 1.0.0-r1
+          Architecture: all
+          Maintainer: JianxianApp
+          Depends: luci-base, firewall4, nftables
+          License: GPL-3.0-or-later
+          Description: LuCI smart WebRTC STUN UDP leak mitigation
+          EOF
+          mkdir -p dist
+          python3 "$PKG/build_ipk.py" "$STAGE" dist/luci-app-webrtc-guard_1.0.0-r1_all.ipk
+          gzip -t dist/luci-app-webrtc-guard_1.0.0-r1_all.ipk
+          tar -tzf dist/luci-app-webrtc-guard_1.0.0-r1_all.ipk
+          sha256sum dist/*.ipk | tee dist/SHA256SUMS
+
+      - name: Verify package contents and policy
+        run: |
+          set -eux
+          python3 package/luci-app-webrtc-guard/tests/check_package.py
+
+      - name: Upload IPK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: luci-app-webrtc-guard-ipk
+          path: |
+            dist/*.ipk
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
