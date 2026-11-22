@@ -7,21 +7,36 @@ config_load webrtc_guard
 config_get ENABLED "$CONFIG_SECTION" enabled "0"
 config_get MODE "$CONFIG_SECTION" mode "smart"
 config_get LAN_IFACE "$CONFIG_SECTION" lan_ifname "br-lan"
+
 remove_rules() { nft delete table inet webrtc_guard 2>/dev/null || true; }
-valid_mac() { printf '%s' "$1" | grep -Eiq '^([0-9a-f]{2}:){5}[0-9a-f]{2}$'; }
-add_device() {
-	local section="$1" mac policy
-	config_get mac "$section" mac ""
-	config_get policy "$section" policy "smart"
-	[ -n "$mac" ] || return 0
-	valid_mac "$mac" || { echo "ERROR: invalid MAC in $section" >&2; return 1; }
-	mac="$(printf '%s' "$mac" | tr 'A-F' 'a-f')"
-	case "$policy" in
-		smart) nft add element inet webrtc_guard smart_macs "{ $mac }" ;;
-		strict) nft add element inet webrtc_guard strict_macs "{ $mac }" ;;
-		*) echo "ERROR: invalid device policy in $section" >&2; return 1 ;;
-	esac
+valid_ipv4() {
+	printf '%s' "$1" | awk -F. 'NF != 4 {exit 1} {for(i=1;i<=4;i++) if($i !~ /^[0-9]+$/ || $i > 255) exit 1}'
 }
+valid_ipv6() { printf '%s' "$1" | grep -Eiq '^[0-9a-f:]+$'; }
+
+add_device() {
+	local section="$1" ip4 ip6 policy
+	config_get ip4 "$section" ipv4 ""
+	config_get ip6 "$section" ipv6 ""
+	config_get policy "$section" policy "smart"
+	case "$policy" in smart|strict) ;; *) echo "ERROR: invalid policy in $section" >&2; return 1 ;; esac
+	if [ -n "$ip4" ]; then
+		valid_ipv4 "$ip4" || { echo "ERROR: invalid IPv4 in $section" >&2; return 1; }
+		case "$policy" in
+			smart) nft add element inet webrtc_guard smart4 "{ $ip4 }" ;;
+			strict) nft add element inet webrtc_guard strict4 "{ $ip4 }" ;;
+		esac
+	fi
+	if [ -n "$ip6" ]; then
+		valid_ipv6 "$ip6" || { echo "ERROR: invalid IPv6 in $section" >&2; return 1; }
+		case "$policy" in
+			smart) nft add element inet webrtc_guard smart6 "{ $ip6 }" ;;
+			strict) nft add element inet webrtc_guard strict6 "{ $ip6 }" ;;
+		esac
+	fi
+	[ -n "$ip4$ip6" ] || { echo "ERROR: device $section needs an IPv4 or IPv6 address" >&2; return 1; }
+}
+
 apply_rules() {
 	if [ "$ENABLED" != "1" ]; then remove_rules; echo "WebRTC Leak Guard is disabled."; return 0; fi
 	command -v nft >/dev/null 2>&1 || { echo "ERROR: nft command not found" >&2; return 1; }
@@ -30,8 +45,10 @@ apply_rules() {
 	remove_rules
 	nft -f - <<EOF
 table inet webrtc_guard {
-	set smart_macs { type ether_addr; }
-	set strict_macs { type ether_addr; }
+	set smart4 { type ipv4_addr; }
+	set smart6 { type ipv6_addr; }
+	set strict4 { type ipv4_addr; }
+	set strict6 { type ipv6_addr; }
 	chain forward { type filter hook forward priority -5; policy accept; }
 }
 EOF
@@ -45,9 +62,12 @@ EOF
 			;;
 		device)
 			config_foreach add_device device
-			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" ether saddr @smart_macs udp dport { 3478, 5349, 19302-19309 } counter drop comment '"webrtc-guard-device-smart"'
-			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" ether saddr @strict_macs udp dport != { 53, 123 } counter drop comment '"webrtc-guard-device-strict-udp"'
-			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" ether saddr @strict_macs tcp dport { 3478, 5349 } counter drop comment '"webrtc-guard-device-strict-tcp"'
+			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" ip saddr @smart4 udp dport { 3478, 5349, 19302-19309 } counter drop comment '"webrtc-guard-device-smart4"'
+			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" ip6 saddr @smart6 udp dport { 3478, 5349, 19302-19309 } counter drop comment '"webrtc-guard-device-smart6"'
+			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" ip saddr @strict4 udp dport != { 53, 123 } counter drop comment '"webrtc-guard-device-strict4"'
+			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" ip6 saddr @strict6 udp dport != { 53, 123 } counter drop comment '"webrtc-guard-device-strict6"'
+			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" ip saddr @strict4 tcp dport { 3478, 5349 } counter drop comment '"webrtc-guard-device-strict-tcp4"'
+			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" ip6 saddr @strict6 tcp dport { 3478, 5349 } counter drop comment '"webrtc-guard-device-strict-tcp6"'
 			;;
 	esac
 	echo "WebRTC Leak Guard active: mode=$MODE interface=$LAN_IFACE"
