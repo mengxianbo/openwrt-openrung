@@ -1,0 +1,225 @@
+name: OpenRung Future Corresponding Source
+
+on:
+  workflow_run:
+    workflows: ["Build OpenRung OpenWrt IPK"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: openrung-corresponding-source-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  corresponding-source:
+    # The historical #24 build is deliberately excluded. This workflow only
+    # handles builds completed after this workflow is merged into main.
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.id != 44885434847 }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout the exact packaging commit used by the build
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+
+      - name: Download the exact IPK build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: openrung-openwrt-ipk
+          path: artifacts/build
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Read exact source revisions from the built IPK
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import gzip
+          import io
+          import pathlib
+          import re
+          import tarfile
+
+          root = pathlib.Path("artifacts/build")
+          ipks = sorted(root.glob("openrung-client_*_x86_64.ipk"))
+          if len(ipks) != 1:
+              raise SystemExit(f"Expected exactly one versioned client IPK, found {len(ipks)}")
+
+          with tarfile.open(ipks[0], "r:gz") as outer:
+              data_member = outer.extractfile("./data.tar.gz") or outer.extractfile("data.tar.gz")
+              control_member = outer.extractfile("./control.tar.gz") or outer.extractfile("control.tar.gz")
+              if data_member is None or control_member is None:
+                  raise SystemExit("IPK is missing data.tar.gz or control.tar.gz")
+              data_bytes = data_member.read()
+              control_bytes = control_member.read()
+
+          def read_members(blob):
+              with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as archive:
+                  return {
+                      member.name.removeprefix("./"): archive.extractfile(member).read()
+                      for member in archive.getmembers()
+                      if member.isfile()
+                  }
+
+          data = read_members(data_bytes)
+          control = read_members(control_bytes)
+          info = data.get("usr/share/openrung/SOURCE-INFO.txt")
+          license_text = data.get("usr/share/openrung/LICENSE", b"")
+          notices = data.get("usr/share/openrung/THIRD_PARTY_NOTICES.md", b"")
+          addendum = data.get("usr/share/openrung/DISTRIBUTION-NOTICE-ADDENDUM.md", b"")
+          if not info or not license_text.strip() or not notices.strip() or not addendum.strip():
+              raise SystemExit("Client IPK is missing SOURCE-INFO, LICENSE, THIRD_PARTY_NOTICES, or distribution addendum")
+          notice_text = notices.decode("utf-8", "replace")
+          if "<add " in notice_text:
+              raise SystemExit("Unresolved upstream distributor placeholder in packaged third-party notices")
+          if b"sing-box" not in notices.lower():
+              raise SystemExit("Expected sing-box third-party attribution is missing")
+
+          control_text = control.get("control", b"").decode("utf-8", "replace")
+          if "License: GPL-3.0-or-later" not in control_text:
+              raise SystemExit("Client IPK control metadata does not declare GPL-3.0-or-later")
+
+          text = info.decode("utf-8", "replace")
+          def required(pattern, label):
+              match = re.search(pattern, text)
+              if not match:
+                  raise SystemExit(f"Cannot read {label} from SOURCE-INFO.txt")
+              return match.group(1)
+
+          packaging = required(r"Exact packaging source commit:\s*([0-9a-f]{40})", "packaging commit")
+          upstream = required(r"Exact upstream source commit:\s*([0-9a-f]{40})", "upstream commit")
+          print(f"packaging_commit={packaging}")
+          print(f"upstream_commit={upstream}")
+          PY
+
+          test "${{ steps.source.outputs.packaging_commit }}" = "${{ github.event.workflow_run.head_sha }}"
+
+      - name: Set up the exact Go toolchain used by the package build
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.5"
+          cache: false
+
+      - name: Assemble vendored corresponding source and distributor notices
+        env:
+          PACKAGING_COMMIT: ${{ steps.source.outputs.packaging_commit }}
+          UPSTREAM_COMMIT: ${{ steps.source.outputs.upstream_commit }}
+          BUILD_RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist upstream-source
+
+          test -s "artifacts/build/openwrt-openrung-source-${PACKAGING_COMMIT}.tar.gz"
+          test -s "artifacts/build/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz"
+          test -s artifacts/build/SHA256SUMS
+
+          # Verify the package hashes before including the checksum manifest.
+          (cd artifacts/build && sha256sum -c SHA256SUMS)
+
+          # Keep the exact, unmodified source snapshots separate from the
+          # generated vendor-inclusive corresponding-source archive.
+          cp "artifacts/build/openwrt-openrung-source-${PACKAGING_COMMIT}.tar.gz" dist/
+          cp "artifacts/build/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz" dist/
+          cp artifacts/build/SHA256SUMS dist/IPK-SHA256SUMS
+
+          tar -xzf "artifacts/build/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz" \
+            -C upstream-source --strip-components=1
+          test -s upstream-source/go.mod
+          test -s upstream-source/go.sum
+          test -s upstream-source/LICENSE
+          test -s upstream-source/THIRD_PARTY_NOTICES.md
+
+          (
+            cd upstream-source
+            go mod vendor
+            test -s vendor/modules.txt
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+              go list -mod=vendor -tags='with_utls,with_external_windivert' ./cmd/client >/dev/null
+          )
+
+          MODULE_COUNT="$(grep -c '^# ' upstream-source/vendor/modules.txt || true)"
+          LICENSE_COUNT="$(find upstream-source/vendor -type f \
+            \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) | wc -l)"
+          test "${MODULE_COUNT}" -gt 0
+          test "${LICENSE_COUNT}" -gt 0
+
+          # Deterministic tar metadata; the upstream checkout remains untouched.
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
+            --numeric-owner -cf - -C upstream-source . | gzip -n \
+            > "dist/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}-with-vendor.tar.gz"
+
+          cp upstream-source/LICENSE dist/OPENRUNG-UPSTREAM-LICENSE.txt
+          cp upstream-source/THIRD_PARTY_NOTICES.md dist/OPENRUNG-THIRD-PARTY-NOTICES.md
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          notice = Path("dist/OPENRUNG-THIRD-PARTY-NOTICES.md")
+          content = notice.read_text(encoding="utf-8")
+          content = re.sub(r"<add contact /\s*repo issues URL>", "https://github.com/mengxianbo/openwrt-openrung/issues", content)
+          content = content.replace("<add public repo URL>", "https://github.com/openrung/openrung")
+          if "<add " in content:
+              raise SystemExit("Unresolved distributor placeholder remains in rendered notices")
+          notice.write_text(content, encoding="utf-8")
+          PY
+
+          cp LICENSE dist/PACKAGING-LICENSE
+          cp LICENSES.md dist/
+          cp DISTRIBUTION-NOTICE-ADDENDUM.md dist/
+          cp DEPENDENCY-LICENSE-AUDIT.md dist/
+
+          cat > dist/SOURCE-MANIFEST.txt <<EOF
+          OpenRung future-build corresponding source distribution
+          Build workflow run ID: ${BUILD_RUN_ID}
+          Packaging repository: https://github.com/mengxianbo/openwrt-openrung
+          Exact packaging commit: ${PACKAGING_COMMIT}
+          Upstream repository: https://github.com/openrung/openrung
+          Exact upstream commit: ${UPSTREAM_COMMIT}
+          Client target: ./cmd/client
+          Build platform: linux/amd64
+          CGO_ENABLED: 0
+          Build tags: with_utls,with_external_windivert
+          Go toolchain: $(go version)
+          Vendored Go module entries: ${MODULE_COUNT}
+          Vendor license/notice files found: ${LICENSE_COUNT}
+
+          The vendor-inclusive archive contains the exact upstream source tree
+          plus the dependency source selected by go mod vendor. The packaging
+          source archive contains the exact IPK packaging scripts and LuCI code.
+          The original IPK files and their hashes are included separately.
+          EOF
+
+          (
+            cd dist
+            find . -maxdepth 1 -type f ! -name 'SHA256SUMS-SOURCE*' \
+              -printf '%f\n' | sort | xargs -r sha256sum > SHA256SUMS-SOURCE
+            sha256sum SHA256SUMS-SOURCE > SHA256SUMS-SOURCE.sha256
+          )
+
+      - name: Verify all corresponding-source files and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -c SHA256SUMS-SOURCE
+          sha256sum -c SHA256SUMS-SOURCE.sha256
+          tar -tzf "openwrt-openrung-source-${{ steps.source.outputs.packaging_commit }}.tar.gz" >/dev/null
+          tar -tzf "openrung-upstream-source-${{ steps.source.outputs.upstream_commit }}.tar.gz" >/dev/null
+          tar -tzf "openrung-upstream-corresponding-source-${{ steps.source.outputs.upstream_commit }}-with-vendor.tar.gz" >/dev/null
+          echo "PASS: exact packaging source, exact upstream source, vendored dependencies, notices, licenses, and SHA256 manifests verified."
+
+      - name: Upload future-build corresponding-source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openrung-corresponding-source-${{ steps.source.outputs.upstream_commit }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 90
