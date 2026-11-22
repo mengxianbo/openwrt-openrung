@@ -11,6 +11,7 @@ on:
   push:
     paths:
       - "package/**"
+      - "!package/luci-app-webrtc-guard/**"
       - "README.md"
 
 permissions:
