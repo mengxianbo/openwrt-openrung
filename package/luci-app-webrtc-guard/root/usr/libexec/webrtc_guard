@@ -7,13 +7,9 @@ config_load webrtc_guard
 config_get ENABLED "$CONFIG_SECTION" enabled "0"
 config_get MODE "$CONFIG_SECTION" mode "smart"
 config_get LAN_IFACE "$CONFIG_SECTION" lan_ifname "br-lan"
-
 remove_rules() { nft delete table inet webrtc_guard 2>/dev/null || true; }
-valid_ipv4() {
-	printf '%s' "$1" | awk -F. 'NF != 4 {exit 1} {for(i=1;i<=4;i++) if($i !~ /^[0-9]+$/ || $i > 255) exit 1}'
-}
+valid_ipv4() { printf '%s' "$1" | awk -F. 'NF != 4 {exit 1} {for(i=1;i<=4;i++) if($i !~ /^[0-9]+$/ || $i > 255) exit 1}'; }
 valid_ipv6() { printf '%s' "$1" | grep -Eiq '^[0-9a-f:]+$'; }
-
 add_device() {
 	local section="$1" ip4 ip6 policy
 	config_get ip4 "$section" ipv4 ""
@@ -22,21 +18,14 @@ add_device() {
 	case "$policy" in smart|strict) ;; *) echo "ERROR: invalid policy in $section" >&2; return 1 ;; esac
 	if [ -n "$ip4" ]; then
 		valid_ipv4 "$ip4" || { echo "ERROR: invalid IPv4 in $section" >&2; return 1; }
-		case "$policy" in
-			smart) nft add element inet webrtc_guard smart4 "{ $ip4 }" ;;
-			strict) nft add element inet webrtc_guard strict4 "{ $ip4 }" ;;
-		esac
+		case "$policy" in smart) nft add element inet webrtc_guard smart4 "{ $ip4 }" ;; strict) nft add element inet webrtc_guard strict4 "{ $ip4 }" ;; esac
 	fi
 	if [ -n "$ip6" ]; then
 		valid_ipv6 "$ip6" || { echo "ERROR: invalid IPv6 in $section" >&2; return 1; }
-		case "$policy" in
-			smart) nft add element inet webrtc_guard smart6 "{ $ip6 }" ;;
-			strict) nft add element inet webrtc_guard strict6 "{ $ip6 }" ;;
-		esac
+		case "$policy" in smart) nft add element inet webrtc_guard smart6 "{ $ip6 }" ;; strict) nft add element inet webrtc_guard strict6 "{ $ip6 }" ;; esac
 	fi
 	[ -n "$ip4$ip6" ] || { echo "ERROR: device $section needs an IPv4 or IPv6 address" >&2; return 1; }
 }
-
 apply_rules() {
 	if [ "$ENABLED" != "1" ]; then remove_rules; echo "WebRTC Leak Guard is disabled."; return 0; fi
 	command -v nft >/dev/null 2>&1 || { echo "ERROR: nft command not found" >&2; return 1; }
@@ -72,7 +61,7 @@ EOF
 	esac
 	echo "WebRTC Leak Guard active: mode=$MODE interface=$LAN_IFACE"
 }
-case "\${1:-}" in
+case "${1:-}" in
 	apply) apply_rules ;;
 	remove) remove_rules ;;
 	status) if nft list table inet webrtc_guard >/dev/null 2>&1; then nft list table inet webrtc_guard; else echo "WebRTC Leak Guard rules are not active."; fi ;;
