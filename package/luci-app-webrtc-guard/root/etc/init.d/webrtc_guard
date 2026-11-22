@@ -1,0 +1,17 @@
+#!/bin/sh /etc/rc.common
+
+START=95
+STOP=10
+USE_PROCD=1
+
+start_service() {
+	/usr/libexec/webrtc_guard apply
+}
+
+stop_service() {
+	/usr/libexec/webrtc_guard remove
+}
+
+reload_service() {
+	/usr/libexec/webrtc_guard apply
+}
