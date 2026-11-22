@@ -3,7 +3,9 @@ config webrtc_guard 'main'
 	option mode 'smart'
 	option lan_ifname 'br-lan'
 
+# 按设备防护示例：填写固定分配给设备的地址
 # config device 'phone'
 # 	option name '手机'
-# 	option mac 'AA:BB:CC:DD:EE:FF'
+# 	option ipv4 '10.10.10.20'
+# 	option ipv6 'fd00::20'
 # 	option policy 'smart'
