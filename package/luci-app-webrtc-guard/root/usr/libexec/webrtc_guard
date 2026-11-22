@@ -1,70 +1,60 @@
 #!/bin/sh
-# JianxianApp WebRTC Leak Guard
-# GPL-3.0-or-later
-
+# JianxianApp WebRTC Leak Guard - GPL-3.0-or-later
 set -eu
-
 . /lib/functions.sh
-
 CONFIG_SECTION="main"
 config_load webrtc_guard
 config_get ENABLED "$CONFIG_SECTION" enabled "0"
+config_get MODE "$CONFIG_SECTION" mode "smart"
 config_get LAN_IFACE "$CONFIG_SECTION" lan_ifname "br-lan"
-
-remove_rules() {
-	# Delete only this plugin's private nftables table.
-	nft delete table inet webrtc_guard 2>/dev/null || true
+remove_rules() { nft delete table inet webrtc_guard 2>/dev/null || true; }
+valid_mac() { printf '%s' "$1" | grep -Eiq '^([0-9a-f]{2}:){5}[0-9a-f]{2}$'; }
+add_device() {
+	local section="$1" mac policy
+	config_get mac "$section" mac ""
+	config_get policy "$section" policy "smart"
+	[ -n "$mac" ] || return 0
+	valid_mac "$mac" || { echo "ERROR: invalid MAC in $section" >&2; return 1; }
+	mac="$(printf '%s' "$mac" | tr 'A-F' 'a-f')"
+	case "$policy" in
+		smart) nft add element inet webrtc_guard smart_macs "{ $mac }" ;;
+		strict) nft add element inet webrtc_guard strict_macs "{ $mac }" ;;
+		*) echo "ERROR: invalid device policy in $section" >&2; return 1 ;;
+	esac
 }
-
 apply_rules() {
-	if [ "$ENABLED" != "1" ]; then
-		remove_rules
-		echo "WebRTC Leak Guard is disabled."
-		return 0
-	fi
-
-	if ! command -v nft >/dev/null 2>&1; then
-		echo "ERROR: nft command not found; install nftables." >&2
-		return 1
-	fi
-
-	# Interface names are validated before being embedded in nft syntax.
-	if ! printf '%s' "$LAN_IFACE" | grep -Eq '^[A-Za-z0-9_.:-]{1,15}$'; then
-		echo "ERROR: invalid LAN interface name: $LAN_IFACE" >&2
-		return 1
-	fi
-
-	# Replace only our own table. The nft -f transaction installs the new
-	# table and chain together; unrelated firewall4 tables are untouched.
+	if [ "$ENABLED" != "1" ]; then remove_rules; echo "WebRTC Leak Guard is disabled."; return 0; fi
+	command -v nft >/dev/null 2>&1 || { echo "ERROR: nft command not found" >&2; return 1; }
+	printf '%s' "$LAN_IFACE" | grep -Eq '^[A-Za-z0-9_.:-]{1,15}$' || { echo "ERROR: invalid LAN interface" >&2; return 1; }
+	case "$MODE" in smart|strict|device) ;; *) echo "ERROR: invalid mode: $MODE" >&2; return 1 ;; esac
 	remove_rules
 	nft -f - <<EOF
 table inet webrtc_guard {
-	chain forward {
-		type filter hook forward priority -5; policy accept;
-		iifname "$LAN_IFACE" udp dport { 3478, 5349, 19302-19309 } counter drop comment "webrtc-guard-known-stun-udp"
-	}
+	set smart_macs { type ether_addr; }
+	set strict_macs { type ether_addr; }
+	chain forward { type filter hook forward priority -5; policy accept; }
 }
 EOF
-	echo "WebRTC Leak Guard enabled on $LAN_IFACE."
-	echo "Policy: block common STUN/TURN UDP ports only; other UDP remains allowed."
+	case "$MODE" in
+		smart)
+			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" udp dport { 3478, 5349, 19302-19309 } counter drop comment '"webrtc-guard-smart-stun"'
+			;;
+		strict)
+			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" udp dport != { 53, 123 } counter drop comment '"webrtc-guard-strict-udp"'
+			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" tcp dport { 3478, 5349 } counter drop comment '"webrtc-guard-strict-tcp"'
+			;;
+		device)
+			config_foreach add_device device
+			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" ether saddr @smart_macs udp dport { 3478, 5349, 19302-19309 } counter drop comment '"webrtc-guard-device-smart"'
+			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" ether saddr @strict_macs udp dport != { 53, 123 } counter drop comment '"webrtc-guard-device-strict-udp"'
+			nft add rule inet webrtc_guard forward iifname "$LAN_IFACE" ether saddr @strict_macs tcp dport { 3478, 5349 } counter drop comment '"webrtc-guard-device-strict-tcp"'
+			;;
+	esac
+	echo "WebRTC Leak Guard active: mode=$MODE interface=$LAN_IFACE"
 }
-
-case "${1:-}" in
-	apply)
-		apply_rules
-		;;
-	remove)
-		remove_rules
-		;;
-	status)
-		if nft list table inet webrtc_guard >/dev/null 2>&1; then
-			nft list table inet webrtc_guard
-		else
-			echo "WebRTC Leak Guard rules are not active."
-		fi
-		;;
-	*)
-		echo "Usage: $0 {apply|remove|status}" >&2
-		exit 2
-		;;
+case "\${1:-}" in
+	apply) apply_rules ;;
+	remove) remove_rules ;;
+	status) if nft list table inet webrtc_guard >/dev/null 2>&1; then nft list table inet webrtc_guard; else echo "WebRTC Leak Guard rules are not active."; fi ;;
+	*) echo "Usage: $0 {apply|remove|status}" >&2; exit 2 ;;
 esac
