@@ -5,26 +5,59 @@ on:
     workflows: ["Build OpenRung OpenWrt IPK"]
     types: [completed]
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: "Build #45 original workflow run ID (must remain 44965521571)"
+        required: true
+        default: "44965521571"
+        type: string
+      packaging_commit:
+        description: "Exact packaging commit recorded by Build #45"
+        required: true
+        default: "34607b91e199d41eddae261ddd9ca7362c539b62"
+        type: string
 
 permissions:
   actions: read
   contents: read
 
 concurrency:
-  group: openrung-corresponding-source-${{ github.event.workflow_run.id }}
+  group: openrung-corresponding-source-${{ github.event.workflow_run.id || inputs.build_run_id }}
   cancel-in-progress: false
 
 jobs:
   corresponding-source:
     # The historical #24 build is deliberately excluded. This workflow only
     # handles builds completed after this workflow is merged into main.
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.id != 44885434847 }}
+    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.id != 44885434847) || (github.event_name == 'workflow_dispatch' && inputs.build_run_id == '44965521571') }}
     runs-on: ubuntu-24.04
     steps:
+      - name: Resolve and validate the selected build run
+        id: build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          BUILD_RUN_ID: ${{ github.event.workflow_run.id || inputs.build_run_id }}
+          EXPECTED_PACKAGING_COMMIT: ${{ github.event.workflow_run.head_sha || inputs.packaging_commit }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            test "${BUILD_RUN_ID}" = "44965521571"
+            test "${EXPECTED_PACKAGING_COMMIT}" = "34607b91e199d41eddae261ddd9ca7362c539b62"
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${BUILD_RUN_ID}" > build-run.json
+          jq -e --arg sha "${EXPECTED_PACKAGING_COMMIT}" \\
+            '.id == 44965521571 and .workflow_id == 426399587 and .head_branch == "main" and .head_sha == $sha and .conclusion == "success"' \\
+            build-run.json >/dev/null
+          echo "run_id=${BUILD_RUN_ID}" >> "${GITHUB_OUTPUT}"
+          echo "packaging_commit=${EXPECTED_PACKAGING_COMMIT}" >> "${GITHUB_OUTPUT}"
+
       - name: Checkout the exact packaging commit used by the build
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ steps.build.outputs.packaging_commit }}
           fetch-depth: 1
 
       - name: Download the exact IPK build artifact
@@ -34,7 +67,7 @@ jobs:
           path: artifacts/build
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.build.outputs.run_id }}
 
       - name: Read exact source revisions from the built IPK
         id: source
@@ -104,7 +137,7 @@ jobs:
         shell: bash
         env:
           PACKAGING_COMMIT: ${{ steps.source.outputs.packaging_commit }}
-          EXPECTED_PACKAGING_COMMIT: ${{ github.event.workflow_run.head_sha }}
+          EXPECTED_PACKAGING_COMMIT: ${{ steps.build.outputs.packaging_commit }}
         run: |
           set -euo pipefail
           test -n "${PACKAGING_COMMIT}"
@@ -120,7 +153,7 @@ jobs:
         env:
           PACKAGING_COMMIT: ${{ steps.source.outputs.packaging_commit }}
           UPSTREAM_COMMIT: ${{ steps.source.outputs.upstream_commit }}
-          BUILD_RUN_ID: ${{ github.event.workflow_run.id }}
+          BUILD_RUN_ID: ${{ steps.build.outputs.run_id }}
         shell: bash
         run: |
           set -euo pipefail
