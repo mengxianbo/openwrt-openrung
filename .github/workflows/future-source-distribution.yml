@@ -100,7 +100,15 @@ jobs:
           print(f"upstream_commit={upstream}")
           PY
 
-          test "${{ steps.source.outputs.packaging_commit }}" = "${{ github.event.workflow_run.head_sha }}"
+      - name: Verify packaging commit matches the triggering build
+        shell: bash
+        env:
+          PACKAGING_COMMIT: ${{ steps.source.outputs.packaging_commit }}
+          EXPECTED_PACKAGING_COMMIT: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          test -n "${PACKAGING_COMMIT}"
+          test "${PACKAGING_COMMIT}" = "${EXPECTED_PACKAGING_COMMIT}"
 
       - name: Set up the exact Go toolchain used by the package build
         uses: actions/setup-go@v5
