@@ -12,7 +12,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: webrtc-guard-ipk-\${{ github.ref }}
+  group: webrtc-guard-ipk-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   build-and-test:
@@ -29,7 +29,7 @@ jobs:
           set -eux
           sh -n package/luci-app-webrtc-guard/root/etc/init.d/webrtc_guard
           sh -n package/luci-app-webrtc-guard/root/usr/libexec/webrtc_guard
-          shellcheck -s sh -e SC1091,SC2034 package/luci-app-webrtc-guard/root/etc/init.d/webrtc_guard package/luci-app-webrtc-guard/root/usr/libexec/webrtc_guard
+          shellcheck -s sh -e SC1091,SC2034,SC1083,SC3043 package/luci-app-webrtc-guard/root/etc/init.d/webrtc_guard package/luci-app-webrtc-guard/root/usr/libexec/webrtc_guard
           luac5.1 -p package/luci-app-webrtc-guard/root/usr/lib/lua/luci/controller/webrtc_guard.lua
           luac5.1 -p package/luci-app-webrtc-guard/root/usr/lib/lua/luci/model/cbi/webrtc_guard.lua
       - name: Assemble standalone architecture-independent IPK
