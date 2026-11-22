@@ -9,7 +9,7 @@
 - 3478、5349
 - 19302–19309
 
-其他 UDP 流量不受本插件规则影响。规则使用独立 nftables 表，不修改 `/etc/config/firewall`、firewall4 主配置或 OpenRung 服务。
+其他 UDP 流量不受本插件规则影响。规则使用独立 nftables 表，不修改 `/etc/config/firewall`、firewall4 主配置或 OpenRung 服务。LuCI 点击“保存并应用”后会自动重新加载本插件规则。
 
 ## 重要限制
 
