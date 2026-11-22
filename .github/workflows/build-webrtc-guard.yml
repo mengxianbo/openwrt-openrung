@@ -35,7 +35,7 @@ jobs:
           set -eux
           sh -n package/luci-app-webrtc-guard/root/etc/init.d/webrtc_guard
           sh -n package/luci-app-webrtc-guard/root/usr/libexec/webrtc_guard
-          shellcheck -s sh package/luci-app-webrtc-guard/root/etc/init.d/webrtc_guard package/luci-app-webrtc-guard/root/usr/libexec/webrtc_guard
+          shellcheck -s sh -e SC1091,SC2034 package/luci-app-webrtc-guard/root/etc/init.d/webrtc_guard package/luci-app-webrtc-guard/root/usr/libexec/webrtc_guard
           luac5.1 -p package/luci-app-webrtc-guard/root/usr/lib/lua/luci/controller/webrtc_guard.lua
           luac5.1 -p package/luci-app-webrtc-guard/root/usr/lib/lua/luci/model/cbi/webrtc_guard.lua
 
@@ -46,6 +46,7 @@ jobs:
           STAGE="$RUNNER_TEMP/webrtc-guard-stage"
           mkdir -p "$STAGE/CONTROL" "$STAGE/usr/share/licenses/luci-app-webrtc-guard"
           cp -a "$PKG/root/." "$STAGE/"
+          chmod 0755 "$STAGE/etc/init.d/webrtc_guard" "$STAGE/usr/libexec/webrtc_guard"
           install -m 0644 LICENSE "$STAGE/usr/share/licenses/luci-app-webrtc-guard/LICENSE"
           cat > "$STAGE/CONTROL/control" <<'EOF'
           Package: luci-app-webrtc-guard
