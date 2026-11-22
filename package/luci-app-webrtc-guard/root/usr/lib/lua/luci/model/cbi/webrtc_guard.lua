@@ -16,6 +16,10 @@ iface.description = translate("通常为 br-lan。只填写接口名称，不要
 
 local note = s:option(DummyValue, "_limitations", translate("工作原理与限制"))
 note.rawhtml = false
-note.value = translate("本插件只处理常见 UDP 端口 3478、5349、19302–19309。WebRTC/STUN 可使用其他端口、TCP 或中继，因此路由器规则不能保证阻止所有 WebRTC 地址暴露。浏览器端仍应启用 mDNS/隐私保护，并在代理客户端中确保 IPv4、IPv6 与 UDP 路由策略一致。启用后部分语音/视频通话可能回退或失败。")
+note.default = translate("本插件只处理常见 UDP 端口 3478、5349、19302–19309。WebRTC/STUN 可使用其他端口、TCP 或中继，因此路由器规则不能保证阻止所有 WebRTC 地址暴露。浏览器端仍应启用 mDNS/隐私保护，并在代理客户端中确保 IPv4、IPv6 与 UDP 路由策略一致。启用后部分语音/视频通话可能回退或失败。")
+
+function m.on_after_commit(self)
+	luci.sys.call("/etc/init.d/webrtc_guard reload >/dev/null 2>&1")
+end
 
 return m
