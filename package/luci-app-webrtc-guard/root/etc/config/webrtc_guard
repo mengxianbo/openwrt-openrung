@@ -1,3 +1,9 @@
 config webrtc_guard 'main'
 	option enabled '0'
+	option mode 'smart'
 	option lan_ifname 'br-lan'
+
+# config device 'phone'
+# 	option name '手机'
+# 	option mac 'AA:BB:CC:DD:EE:FF'
+# 	option policy 'smart'
