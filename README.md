@@ -19,12 +19,6 @@
 - PassWall 联动：执行 `openrung-client check` 时，若 PassWall 原本正在运行则先暂停，检测结束后自动恢复；原本关闭则保持关闭。
 - 默认使用无 TUN 的本地代理模式。TUN 当前禁用，因为目标设备没有 `/dev/net/tun`。
 
-## GitHub Actions 构建
-
-1. Actions -> `Build OpenRung OpenWrt IPK` -> Run workflow。
-2. 构建完成后在 Actions 的 Artifacts 下载 `openrung-openwrt-ipk`。
-3. Workflow 也会发布到 Release：`openwrt-latest`。
-
 ## LuCI 修改端口
 
 进入 OpenRung 页面，修改“本地监听端口”（1–65535），保存并应用后重启 OpenRung。状态栏会显示实际监听地址和端口。默认端口为 44025。
