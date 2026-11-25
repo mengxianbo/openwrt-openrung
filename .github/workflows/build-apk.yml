@@ -21,7 +21,7 @@ concurrency:
   # Keep APK builds independent from the IPK workflow; GitHub retains only one pending
   # run per concurrency group, so a shared group can silently cancel the other workflow.
   # APK and IPK publish distinct asset filenames to the same unified Release.
-  group: openrung-apk-release
+  group: openrung-unified-release
   cancel-in-progress: false
 
 jobs:
@@ -119,6 +119,7 @@ jobs:
           # Publish stable filenames so router installation commands never depend on version strings.
           cp "$CLIENT_APK" dist/openrung-client_x86_64.apk
           cp "$LUCI_APK" dist/luci-app-openrung_all.apk
+          rm -f "$CLIENT_APK" "$LUCI_APK"
 
           cp upstream/LICENSE dist/OPENRUNG-UPSTREAM-LICENSE
           cp upstream/THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
@@ -142,6 +143,44 @@ jobs:
           path: dist/*
           if-no-files-found: error
           retention-days: 30
+
+      - name: Remove obsolete release assets and old releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          KEEP='
+          APK-SHA256SUMS
+          IPK-SHA256SUMS
+          openrung-client_x86_64.apk
+          luci-app-openrung_all.apk
+          openrung-openwrt-25.12-x86_64-bundle.zip
+          openrung-client_x86_64.ipk
+          luci-app-openrung_all.ipk
+          openrung-ipk.zip
+          OPENRUNG-UPSTREAM-LICENSE
+          THIRD_PARTY_NOTICES.md
+          PACKAGING-LICENSE
+          SOURCE-INFO.txt
+          '
+          RELEASE_ID="$(gh api "repos/$GH_REPO/releases/tags/openwrt-packages" --jq .id 2>/dev/null || true)"
+          if [ -n "$RELEASE_ID" ]; then
+            gh api "repos/$GH_REPO/releases/$RELEASE_ID/assets" --paginate --jq '.[].id' |
+            while read -r asset_id; do
+              name="$(gh api "repos/$GH_REPO/releases/assets/$asset_id" --jq .name)"
+              if ! printf '%s\n' "$KEEP" | grep -Fxq "$name"; then
+                echo "Removing obsolete asset: $name"
+                gh api --method DELETE "repos/$GH_REPO/releases/assets/$asset_id"
+              fi
+            done
+          fi
+          gh api "repos/$GH_REPO/releases" --paginate --jq '.[] | select(.tag_name != "openwrt-packages") | [.id,.tag_name] | @tsv' |
+          while IFS="$(printf '\t')" read -r release_id tag; do
+            echo "Removing obsolete release: $tag"
+            gh api --method DELETE "repos/$GH_REPO/releases/$release_id"
+            gh api --method DELETE "repos/$GH_REPO/git/refs/tags/$tag" || true
+          done
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
