@@ -172,16 +172,28 @@ jobs:
           UPSTREAM_ARCHIVE="$(find artifacts/build -type f -name "openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz" -print -quit)"
           test -n "${PACKAGING_ARCHIVE}" && test -s "${PACKAGING_ARCHIVE}"
           test -n "${UPSTREAM_ARCHIVE}" && test -s "${UPSTREAM_ARCHIVE}"
-          test -s artifacts/build/SHA256SUMS
+
+          # The IPK build artifact publishes IPK-SHA256SUMS at its root.
+          # Keep a fallback for older retained artifacts that used SHA256SUMS.
+          CHECKSUM_FILE=""
+          if [ -s artifacts/build/IPK-SHA256SUMS ]; then
+            CHECKSUM_FILE="IPK-SHA256SUMS"
+          elif [ -s artifacts/build/SHA256SUMS ]; then
+            CHECKSUM_FILE="SHA256SUMS"
+          else
+            echo "The IPK build artifact is missing IPK-SHA256SUMS (or legacy SHA256SUMS)" >&2
+            find artifacts/build -maxdepth 2 -type f -printf '%P\\n' | sort >&2
+            exit 1
+          fi
 
           # Verify the package hashes before including the checksum manifest.
-          (cd artifacts/build && sha256sum -c SHA256SUMS)
+          (cd artifacts/build && sha256sum -c "${CHECKSUM_FILE}")
 
           # Keep the exact, unmodified source snapshots separate from the
           # generated vendor-inclusive corresponding-source archive.
           cp "${PACKAGING_ARCHIVE}" dist/
           cp "${UPSTREAM_ARCHIVE}" dist/
-          cp artifacts/build/SHA256SUMS dist/IPK-SHA256SUMS
+          cp "artifacts/build/${CHECKSUM_FILE}" dist/IPK-SHA256SUMS
 
           # Use the discovered artifact path; do not assume a fixed ZIP extraction layout.
           tar -xzf "${UPSTREAM_ARCHIVE}" -C upstream-source --strip-components=1
