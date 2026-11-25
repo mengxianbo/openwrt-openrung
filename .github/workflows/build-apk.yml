@@ -18,8 +18,10 @@ permissions:
   contents: write
 
 concurrency:
-  # Serialize APK and IPK publication so both workflows safely update one Release.
-  group: openrung-unified-release
+  # Keep APK builds independent from the IPK workflow; GitHub retains only one pending
+  # run per concurrency group, so a shared group can silently cancel the other workflow.
+  # APK and IPK publish distinct asset filenames to the same unified Release.
+  group: openrung-apk-release
   cancel-in-progress: false
 
 jobs:
