@@ -162,8 +162,10 @@ jobs:
           set -euo pipefail
           mkdir -p dist upstream-source
 
-          test -s "artifacts/build/out/openwrt-openrung-source-${PACKAGING_COMMIT}.tar.gz"
-          test -s "artifacts/build/out/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz"
+          PACKAGING_ARCHIVE="$(find artifacts/build -type f -name "openwrt-openrung-source-${PACKAGING_COMMIT}.tar.gz" -print -quit)"
+          UPSTREAM_ARCHIVE="$(find artifacts/build -type f -name "openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz" -print -quit)"
+          test -n "${PACKAGING_ARCHIVE}" && test -s "${PACKAGING_ARCHIVE}"
+          test -n "${UPSTREAM_ARCHIVE}" && test -s "${UPSTREAM_ARCHIVE}"
           test -s artifacts/build/SHA256SUMS
 
           # Verify the package hashes before including the checksum manifest.
@@ -171,8 +173,8 @@ jobs:
 
           # Keep the exact, unmodified source snapshots separate from the
           # generated vendor-inclusive corresponding-source archive.
-          cp "artifacts/build/out/openwrt-openrung-source-${PACKAGING_COMMIT}.tar.gz" dist/
-          cp "artifacts/build/out/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz" dist/
+          cp "${PACKAGING_ARCHIVE}" dist/
+          cp "${UPSTREAM_ARCHIVE}" dist/
           cp artifacts/build/SHA256SUMS dist/IPK-SHA256SUMS
 
           tar -xzf "artifacts/build/out/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz" \
