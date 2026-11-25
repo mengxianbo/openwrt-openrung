@@ -98,7 +98,11 @@ logread -e openrung | tail -50
 
 **注意：** 本项目提供源码定位与版权声明，不代表对所有第三方依赖重新授权。分发 IPK 时请同时保留包内的许可证和第三方声明文件。
 
-## 源码归档与历史版本说明\n\n- 当前稳定二进制下载入口只有 [统一 Release：openwrt-packages](https://github.com/mengxianbo/openwrt-openrung/releases/tag/openwrt-packages)。该 Release 发布 APK、IPK、ZIP 合集和校验文件；对应源码归档通过 GitHub Actions artifacts 单独提供，不要把源码 artifact 误认为 Release 附件。\n- 当前 IPK 对应源码说明见 [FUTURE-SOURCE-DISTRIBUTION.md](./FUTURE-SOURCE-DISTRIBUTION.md)。\n- [SOURCE-DISTRIBUTION.md](./SOURCE-DISTRIBUTION.md) 仅记录历史 Build #24 的源码归档与精确版本，不代表当前 Release 或当前构建。\n\n## 运行验收
+## 源码归档与历史版本说明
+
+- 当前稳定二进制下载入口只有 [统一 Release：openwrt-packages](https://github.com/mengxianbo/openwrt-openrung/releases/tag/openwrt-packages)。该 Release 发布 APK、IPK、ZIP 合集和校验文件；对应源码归档通过 GitHub Actions artifacts 单独提供，不要把源码 artifact 误认为 Release 附件。\n- 当前 IPK 对应源码说明见 [FUTURE-SOURCE-DISTRIBUTION.md](./FUTURE-SOURCE-DISTRIBUTION.md)。\n- [SOURCE-DISTRIBUTION.md](./SOURCE-DISTRIBUTION.md) 仅记录历史 Build #24 的源码归档与精确版本，不代表当前 Release 或当前构建。
+
+## 运行验收
 
 1. LuCI 状态栏显示实际监听地址及端口。
 2. `ubus call service list '{"name":"openrung"}'` 中 OpenRung 实例为 `running: true`。
