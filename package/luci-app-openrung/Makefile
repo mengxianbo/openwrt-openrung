@@ -32,7 +32,7 @@ define Package/luci-app-openrung/install
 	$(INSTALL_DATA) ./controller.lua $(1)/usr/lib/lua/luci/controller/openrung.lua
 	$(INSTALL_DATA) ./openrung.lua $(1)/usr/lib/lua/luci/model/cbi/openrung/main.lua
 	$(INSTALL_DIR) $(1)/usr/share/licenses/luci-app-openrung
-	$(INSTALL_DATA) ./../../LICENSE $(1)/usr/share/licenses/luci-app-openrung/LICENSE
+	$(INSTALL_DATA) $(TOPDIR)/LICENSE $(1)/usr/share/licenses/luci-app-openrung/LICENSE
 endef
 
 $(eval $(call BuildPackage,luci-app-openrung))
