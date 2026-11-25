@@ -110,8 +110,13 @@ jobs:
             -exec cp -v {} "$GITHUB_WORKSPACE/dist/" \;
 
           cd "$GITHUB_WORKSPACE"
-          test -n "$(find dist -maxdepth 1 -type f -name 'openrung-client*.apk' -print -quit)"
-          test -n "$(find dist -maxdepth 1 -type f -name 'luci-app-openrung*.apk' -print -quit)"
+          CLIENT_APK="$(find dist -maxdepth 1 -type f -name 'openrung-client*.apk' -print -quit)"
+          LUCI_APK="$(find dist -maxdepth 1 -type f -name 'luci-app-openrung*.apk' -print -quit)"
+          test -n "$CLIENT_APK"
+          test -n "$LUCI_APK"
+          # Publish stable filenames so router installation commands never depend on version strings.
+          cp "$CLIENT_APK" dist/openrung-client_x86_64.apk
+          cp "$LUCI_APK" dist/luci-app-openrung_all.apk
 
           cp upstream/LICENSE dist/OPENRUNG-UPSTREAM-LICENSE
           cp upstream/THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
@@ -123,9 +128,9 @@ jobs:
           OpenRung upstream: https://github.com/openrung/openrung
           OpenRung upstream commit: ${OPENRUNG_COMMIT}
           EOF
-          (cd dist && sha256sum *.apk > APK-SHA256SUMS)
+          (cd dist && sha256sum openrung-client_x86_64.apk luci-app-openrung_all.apk > APK-SHA256SUMS)
           # Bundle both installable APKs into one convenient download.
-          (cd dist && zip -j openrung-openwrt-25.12-x86_64-bundle.zip ./*.apk)
+          (cd dist && zip -j openrung-openwrt-25.12-x86_64-bundle.zip openrung-client_x86_64.apk luci-app-openrung_all.apk)
           ls -lh dist
 
       - name: Upload APK build artifacts
