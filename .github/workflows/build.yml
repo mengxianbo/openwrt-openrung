@@ -312,7 +312,7 @@ jobs:
           echo "PACKAGE_VERSION=${VERSION}" >> "$GITHUB_ENV"
 
           ls -lh ./*.ipk
-          cat SHA256SUMS
+          cat IPK-SHA256SUMS
 
       - name: Verify OpenWrt IPK packages
         run: |
