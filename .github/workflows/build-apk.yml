@@ -194,6 +194,8 @@ jobs:
             - Older OpenWrt releases using opkg: download the IPK files or openrung-ipk.zip.
 
             Individual package files are attached alongside both convenience ZIP archives.
+            This Release contains installable packages, ZIP bundles, checksums and license notices; it is not a source archive.
+            Build metadata records the exact packaging and OpenRung upstream commits.
             The original OpenRung client, LuCI controls, procd service, configurable proxy port
             and PassWall guard are retained.
 
