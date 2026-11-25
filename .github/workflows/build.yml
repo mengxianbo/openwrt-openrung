@@ -369,12 +369,12 @@ jobs:
 
           checks = [
               (
-                  Path(f"openrung-client_{__import__('os').environ['PACKAGE_VERSION']}_x86_64.ipk"),
+                  Path(f"out/openrung-client_{__import__('os').environ['PACKAGE_VERSION']}_x86_64.ipk"),
                   "usr/share/openrung/LICENSE",
                   "openrung-client",
               ),
               (
-                  Path(f"luci-app-openrung_{__import__('os').environ['PACKAGE_VERSION']}_all.ipk"),
+                  Path(f"out/luci-app-openrung_{__import__('os').environ['PACKAGE_VERSION']}_all.ipk"),
                   "usr/share/licenses/luci-app-openrung/LICENSE",
                   "luci-app-openrung",
               ),
