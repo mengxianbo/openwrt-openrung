@@ -6,6 +6,10 @@
 
 面向 KWRT/OpenWrt x86_64 的 OpenRung CLI + LuCI 管理包。
 
+> **统一下载入口：** [OpenRung APK + IPK 最新 Release](https://github.com/mengxianbo/openwrt-openrung/releases/tag/openwrt-packages)。该 Release 同时提供 OpenWrt 25.12 使用的 APK、旧版 opkg 系统使用的 IPK、对应 ZIP 合集及校验文件。请优先使用此入口，不要从历史 Release 下载旧包。
+>
+> **格式选择：** OpenWrt 25.12（APK 包管理器）请选择 APK；仍使用 opkg 的旧版 OpenWrt 请选择 IPK。两个格式不能混装。以下命令均使用 Release 中的稳定文件名，无需手动修改版本号。
+
 > **许可证：** 本项目自编写的代码采用 **GNU GPL-3.0-or-later** 发布。项目集成的 OpenRung 客户端及其第三方组件仍须遵守各自上游许可证与版权声明；请同时查看 [LICENSE](./LICENSE) 和 [OpenRung 上游许可证](https://github.com/openrung/openrung/blob/main/LICENSE)。
 
 ## 当前实现
