@@ -295,19 +295,12 @@ jobs:
             work/luci \
             out/luci-app-openrung_${VERSION}_all.ipk
 
-          # Stable names for direct installation
-          cp out/openrung-client_${VERSION}_x86_64.ipk \
-            out/openrung-client_x86_64.ipk
+          # Publish one stable filename per package; versioned builds stay internal.
+          cp "out/openrung-client_${VERSION}_x86_64.ipk" openrung-client_x86_64.ipk
+          cp "out/luci-app-openrung_${VERSION}_all.ipk" luci-app-openrung_all.ipk
 
-          cp out/luci-app-openrung_${VERSION}_all.ipk \
-            out/luci-app-openrung_all.ipk
-
-          cp out/*.ipk .
-
-          sha256sum ./*.ipk > IPK-SHA256SUMS
-          zip -j openrung-ipk.zip \
-            "openrung-client_${VERSION}_x86_64.ipk" \
-            "luci-app-openrung_${VERSION}_all.ipk"
+          sha256sum openrung-client_x86_64.ipk luci-app-openrung_all.ipk > IPK-SHA256SUMS
+          zip -j openrung-ipk.zip openrung-client_x86_64.ipk luci-app-openrung_all.ipk
 
           echo "PACKAGE_VERSION=${VERSION}" >> "$GITHUB_ENV"
 
@@ -323,8 +316,8 @@ jobs:
           sh -n package/openrung-client/openrung.postinst
 
           for pkg in \
-            openrung-client_${PACKAGE_VERSION}_x86_64.ipk \
-            luci-app-openrung_${PACKAGE_VERSION}_all.ipk
+            out/openrung-client_${PACKAGE_VERSION}_x86_64.ipk \
+            out/luci-app-openrung_${PACKAGE_VERSION}_all.ipk
           do
             echo "===== Verify $pkg ====="
 
@@ -411,12 +404,51 @@ jobs:
         with:
           name: openrung-openwrt-ipk
           path: |
-            *.ipk
+            openrung-client_x86_64.ipk
+            luci-app-openrung_all.ipk
             IPK-SHA256SUMS
             openrung-ipk.zip
             out/*-source-*.tar.gz
           if-no-files-found: error
           retention-days: 30
+
+      - name: Remove obsolete release assets and old releases (IPK workflow)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          KEEP='
+          APK-SHA256SUMS
+          IPK-SHA256SUMS
+          openrung-client_x86_64.apk
+          luci-app-openrung_all.apk
+          openrung-openwrt-25.12-x86_64-bundle.zip
+          openrung-client_x86_64.ipk
+          luci-app-openrung_all.ipk
+          openrung-ipk.zip
+          OPENRUNG-UPSTREAM-LICENSE
+          THIRD_PARTY_NOTICES.md
+          PACKAGING-LICENSE
+          SOURCE-INFO.txt
+          '
+          RELEASE_ID="$(gh api "repos/$GH_REPO/releases/tags/openwrt-packages" --jq .id 2>/dev/null || true)"
+          if [ -n "$RELEASE_ID" ]; then
+            gh api "repos/$GH_REPO/releases/$RELEASE_ID/assets" --paginate --jq '.[].id' |
+            while read -r asset_id; do
+              name="$(gh api "repos/$GH_REPO/releases/assets/$asset_id" --jq .name)"
+              if ! printf '%s\n' "$KEEP" | grep -Fxq "$name"; then
+                echo "Removing obsolete asset: $name"
+                gh api --method DELETE "repos/$GH_REPO/releases/assets/$asset_id"
+              fi
+            done
+          fi
+          gh api "repos/$GH_REPO/releases" --paginate --jq '.[] | select(.tag_name != "openwrt-packages") | [.id,.tag_name] | @tsv' |
+          while IFS="$(printf '\t')" read -r release_id tag; do
+            echo "Removing obsolete release: $tag"
+            gh api --method DELETE "repos/$GH_REPO/releases/$release_id"
+            gh api --method DELETE "repos/$GH_REPO/git/refs/tags/$tag" || true
+          done
 
       - name: Publish IPK packages to the unified GitHub Release
         uses: softprops/action-gh-release@v2
@@ -433,7 +465,8 @@ jobs:
             The IPK packages are built by the original IPK workflow.
             OpenRung upstream commit: ${{ env.OPENRUNG_COMMIT }}
           files: |
-            ./*.ipk
+            ./openrung-client_x86_64.ipk
+            ./luci-app-openrung_all.ipk
             ./IPK-SHA256SUMS
             ./openrung-ipk.zip
           fail_on_unmatched_files: true
