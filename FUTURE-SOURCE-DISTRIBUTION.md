@@ -30,6 +30,14 @@
 3. 在该 run 的关联工作流运行记录中，打开 `OpenRung Future Corresponding Source`，下载名称包含对应上游 commit 的 artifact。
 4. 校验 artifact 中的 `SOURCE-MANIFEST.txt` 和 SHA256 清单。
 
+如果某次成功的 IPK 构建没有自动生成源码 artifact，可以手动补跑：
+
+1. 打开 [OpenRung Future Corresponding Source](https://github.com/mengxianbo/openwrt-openrung/actions/workflows/future-source-distribution.yml)。
+2. 点击 **Run workflow**，填写成功的 IPK 构建 run ID。
+3. 可选填写该构建的 packaging commit SHA；留空时工作流会从 GitHub 构建记录自动读取。
+4. 工作流会核对 run ID、工作流 ID、`main` 分支、成功结论和 commit SHA；不匹配就会停止。
+5. 仅对确认成功的 IPK 构建生成源码 artifact，不会重新编译或修改 IPK。
+
 **不要**将当前 `main` 分支源码、其他构建 run 的 artifact，或历史 Build #24 的源码用于替代某个 IPK 的对应源码。
 
 ## Release 发布规则
