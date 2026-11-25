@@ -86,19 +86,19 @@ ss -lntp 2>/dev/null | grep ':44025' || netstat -lntp 2>/dev/null | grep ':44025
 logread -e openrung | tail -50
 ```
 
-也可以下载 [IPK 合集 ZIP](https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/openrung-ipk.zip)，其中包含两个带版本号的 IPK 安装包。
+也可以下载 [IPK 合集 ZIP](https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/openrung-ipk.zip)，其中包含上述两个稳定命名的 IPK 文件（不是带版本号的文件名）。
 
 ## 许可证与源码对应关系
 
 - 本仓库维护的 OpenWrt 打包脚本及 LuCI 管理代码采用 GPL-3.0-or-later。
 - IPK 中的客户端来自 OpenRung 上游仓库；构建时会将上游 `LICENSE` 和 `THIRD_PARTY_NOTICES.md` 原样安装到 `/usr/share/openrung/`，保留第三方版权、许可证文本和适用的附加条款。
 - 每次构建会记录打包仓库与 OpenRung 上游的精确 Git commit，并在 IPK 内提供 `SOURCE-INFO.txt`。
-- GitHub Actions 会同时发布与该次构建对应的两个源码快照：本仓库打包源码和 OpenRung 上游源码。请下载与 IPK 同一次构建的源码归档，不要用最新版源码替代旧版 IPK。
+- 每次 IPK 构建的 Actions artifact `openrung-openwrt-ipk` 会包含该次构建对应的本仓库打包源码和 OpenRung 上游源码快照；该 artifact 保留 30 天，不是 Release 附件。另一个后置工作流会生成包含 vendored Go 依赖的对应源码 artifact，保留 90 天。请从对应 IPK 构建记录及其关联的源码工作流下载，务必核对 `SOURCE-INFO.txt` 中的精确 commit，不要用最新版源码替代旧版 IPK。
 - 客户端上游及其依赖的完整许可范围，以随包提供的 `THIRD_PARTY_NOTICES.md` 和各组件原始许可为准。
 
 **注意：** 本项目提供源码定位与版权声明，不代表对所有第三方依赖重新授权。分发 IPK 时请同时保留包内的许可证和第三方声明文件。
 
-## 运行验收
+## 源码归档与历史版本说明\n\n- 当前稳定二进制下载入口只有 [统一 Release：openwrt-packages](https://github.com/mengxianbo/openwrt-openrung/releases/tag/openwrt-packages)。该 Release 发布 APK、IPK、ZIP 合集和校验文件；对应源码归档通过 GitHub Actions artifacts 单独提供，不要把源码 artifact 误认为 Release 附件。\n- 当前 IPK 对应源码说明见 [FUTURE-SOURCE-DISTRIBUTION.md](./FUTURE-SOURCE-DISTRIBUTION.md)。\n- [SOURCE-DISTRIBUTION.md](./SOURCE-DISTRIBUTION.md) 仅记录历史 Build #24 的源码归档与精确版本，不代表当前 Release 或当前构建。\n\n## 运行验收
 
 1. LuCI 状态栏显示实际监听地址及端口。
 2. `ubus call service list '{"name":"openrung"}'` 中 OpenRung 实例为 `running: true`。
