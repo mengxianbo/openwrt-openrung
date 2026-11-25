@@ -19,8 +19,9 @@ permissions:
 
 # Prevent older builds from overwriting the latest release assets.
 concurrency:
-  group: openrung-ipk-${{ github.ref }}
-  cancel-in-progress: true
+  # Serialize APK and IPK publication so both workflows safely update one Release.
+  group: openrung-unified-release
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -302,7 +303,10 @@ jobs:
 
           cp out/*.ipk .
 
-          sha256sum ./*.ipk > SHA256SUMS
+          sha256sum ./*.ipk > IPK-SHA256SUMS
+          zip -j openrung-ipk.zip \
+            "openrung-client_${VERSION}_x86_64.ipk" \
+            "luci-app-openrung_${VERSION}_all.ipk"
 
           echo "PACKAGE_VERSION=${VERSION}" >> "$GITHUB_ENV"
 
@@ -407,13 +411,29 @@ jobs:
           name: openrung-openwrt-ipk
           path: |
             *.ipk
-            SHA256SUMS
+            IPK-SHA256SUMS
+            openrung-ipk.zip
             out/*-source-*.tar.gz
           if-no-files-found: error
           retention-days: 30
 
-      # Release publishing is intentionally decoupled from builds.
-      # Build artifacts remain available in Actions; do not overwrite the
-      # stable openwrt-latest Release assets from an automatic build.
-      # Publish a reviewed, explicitly selected build through a separate
-      # controlled release process.
+      - name: Publish IPK packages to the unified GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: openwrt-packages
+          name: "OpenRung OpenWrt Packages (APK + IPK)"
+          body: |
+            Unified OpenRung packages for OpenWrt.
+
+            - OpenWrt 25.12: download the APK files or openrung-openwrt-25.12-x86_64-bundle.zip.
+            - Older OpenWrt releases using opkg: download the IPK files or openrung-ipk.zip.
+
+            Individual package files are attached alongside both convenience ZIP archives.
+            The IPK packages are built by the original IPK workflow.
+            OpenRung upstream commit: ${{ env.OPENRUNG_COMMIT }}
+          files: |
+            ./*.ipk
+            ./IPK-SHA256SUMS
+            ./openrung-ipk.zip
+          fail_on_unmatched_files: true
+          make_latest: true
