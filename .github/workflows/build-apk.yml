@@ -138,7 +138,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: openwrt-25.12-${{ github.run_number }}
-          name: OpenRung for OpenWrt 25.12 x86_64 #${{ github.run_number }}
+          name: "OpenRung for OpenWrt 25.12 x86_64 #${{ github.run_number }}"
           body: |
             OpenWrt 25.12.6 x86_64 native APK packages.
 
