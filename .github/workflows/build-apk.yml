@@ -18,8 +18,9 @@ permissions:
   contents: write
 
 concurrency:
-  group: openrung-apk-25.12-${{ github.ref }}
-  cancel-in-progress: true
+  # Serialize APK and IPK publication so both workflows safely update one Release.
+  group: openrung-unified-release
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -122,7 +123,7 @@ jobs:
           OpenRung upstream: https://github.com/openrung/openrung
           OpenRung upstream commit: ${OPENRUNG_COMMIT}
           EOF
-          (cd dist && sha256sum *.apk > SHA256SUMS)
+          (cd dist && sha256sum *.apk > APK-SHA256SUMS)
           # Bundle both installable APKs into one convenient download.
           (cd dist && zip -j openrung-openwrt-25.12-x86_64-bundle.zip ./*.apk)
           ls -lh dist
@@ -138,17 +139,19 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: openwrt-25.12-${{ github.run_number }}
-          name: "OpenRung for OpenWrt 25.12 x86_64 #${{ github.run_number }}"
+          tag_name: openwrt-packages
+          name: "OpenRung OpenWrt Packages (APK + IPK)"
           body: |
-            OpenWrt 25.12.6 x86_64 native APK packages.
-            Download openrung-openwrt-25.12-x86_64-bundle.zip to get both installable APKs together.
-            The two APK files are also attached separately.
+            Unified OpenRung packages for OpenWrt.
 
-            The existing IPK build workflow is unchanged. The original OpenRung client,
-            LuCI controls, procd service, configurable proxy port and PassWall guard are retained.
+            - OpenWrt 25.12: download the APK files or openrung-openwrt-25.12-x86_64-bundle.zip.
+            - Older OpenWrt releases using opkg: download the IPK files or openrung-ipk.zip.
 
-            OpenRung upstream commit: ${{ env.OPENRUNG_COMMIT }}
+            Individual package files are attached alongside both convenience ZIP archives.
+            The original OpenRung client, LuCI controls, procd service, configurable proxy port
+            and PassWall guard are retained.
+
+            OpenWrt 25.12 OpenRung upstream commit: ${{ env.OPENRUNG_COMMIT }}
           files: dist/*
           fail_on_unmatched_files: true
-          make_latest: false
+          make_latest: true
