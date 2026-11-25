@@ -18,7 +18,7 @@ on:
 permissions:
   contents: write
 
-# Prevent older builds from overwriting the latest release assets.
+# Serialize package publication so APK and IPK workflows update one unified Release safely.
 concurrency:
   # Serialize APK and IPK publication so both workflows safely update one Release.
   group: openrung-unified-release
