@@ -23,6 +23,25 @@
 
 进入 OpenRung 页面，修改“本地监听端口”（1–65535），保存并应用后重启 OpenRung。状态栏会显示实际监听地址和端口。默认端口为 44025。
 
+## OpenWrt 25.12 APK 安装
+
+OpenWrt 25.12 x86_64 使用 APK 包格式。请从 [GitHub Releases](https://github.com/mengxianbo/openwrt-openrung/releases) 下载同一次构建的 `openrung-client` 和 `luci-app-openrung` 两个 APK，然后上传到路由器并执行：
+
+```sh
+apk add --allow-untrusted /tmp/openrung-client-*.apk /tmp/luci-app-openrung-*.apk
+
+uci set openrung.main.enabled='1'
+uci set openrung.main.mode='proxy'
+uci set openrung.main.proxy_port='44025'
+uci set openrung.main.passwall_guard='1'
+uci commit openrung
+
+/etc/init.d/openrung enable
+/etc/init.d/openrung restart
+```
+
+APK 由 OpenWrt 25.12.6 x86/64 官方 SDK 原生构建；原有 IPK 工作流继续保留，适用于旧版 opkg 系统。
+
 ## 命令行安装与设置
 
 ```sh
