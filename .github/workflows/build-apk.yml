@@ -86,9 +86,6 @@ jobs:
           set -eux
           SDK="$SDK_DIR"
 
-          # SDK release configuration must use OpenWrt's APK package backend.
-          grep -q '^CONFIG_USE_APK=y' "$SDK/.config"
-
           mkdir -p "$SDK/package/openrung-client/files"
           cp package/openrung-client/openrung-client-wrapper "$SDK/package/openrung-client/files/"
           cp package/openrung-client/openrung.config "$SDK/package/openrung-client/files/"
@@ -102,6 +99,8 @@ jobs:
 
           cd "$SDK"
           make defconfig
+          # Generate the SDK configuration before checking its APK backend.
+          grep -q '^CONFIG_USE_APK=y' .config
           make package/openrung-client/compile package/luci-app-openrung/compile -j"$(nproc)" V=s
 
           mkdir -p "$GITHUB_WORKSPACE/dist"
