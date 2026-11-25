@@ -51,7 +51,7 @@ define Package/openrung-client/install
 	$(INSTALL_CONF) ./files/openrung.config $(1)/etc/config/openrung
 	$(INSTALL_BIN) ./files/openrung.init $(1)/etc/init.d/openrung
 	$(INSTALL_DIR) $(1)/usr/share/openrung
-	$(INSTALL_DATA) ./../../DISTRIBUTION-NOTICE-ADDENDUM.md $(1)/usr/share/openrung/DISTRIBUTION-NOTICE-ADDENDUM.md
+	$(INSTALL_DATA) $(TOPDIR)/DISTRIBUTION-NOTICE-ADDENDUM.md $(1)/usr/share/openrung/DISTRIBUTION-NOTICE-ADDENDUM.md
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/LICENSE $(1)/usr/share/openrung/LICENSE
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/THIRD_PARTY_NOTICES.md $(1)/usr/share/openrung/THIRD_PARTY_NOTICES.md
 endef
