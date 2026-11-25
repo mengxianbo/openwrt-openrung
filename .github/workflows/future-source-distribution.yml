@@ -28,7 +28,7 @@ jobs:
   corresponding-source:
     # The historical #24 build is deliberately excluded. This workflow only
     # handles builds completed after this workflow is merged into main.
-    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.id != 44885434847) || (github.event_name == 'workflow_dispatch' && inputs.build_run_id == '44965521571') }}
+    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.id != 44885434847) || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
     steps:
       - name: Resolve and validate the selected build run
