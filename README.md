@@ -25,32 +25,14 @@
 
 ## OpenWrt 25.12 APK 安装
 
-OpenWrt 25.12 x86_64 使用 APK 包格式。请从 [GitHub Releases](https://github.com/mengxianbo/openwrt-openrung/releases) 下载同一次构建的 `openrung-client` 和 `luci-app-openrung` 两个 APK，然后上传到路由器并执行：
-
-```sh
-apk add --allow-untrusted /tmp/openrung-client-*.apk /tmp/luci-app-openrung-*.apk
-
-uci set openrung.main.enabled='1'
-uci set openrung.main.mode='proxy'
-uci set openrung.main.proxy_port='44025'
-uci set openrung.main.passwall_guard='1'
-uci commit openrung
-
-/etc/init.d/openrung enable
-/etc/init.d/openrung restart
-```
-
-APK 由 OpenWrt 25.12.6 x86/64 官方 SDK 原生构建；原有 IPK 工作流继续保留，适用于旧版 opkg 系统。
-
-## 命令行安装与设置
+OpenWrt 25.12 x86_64 使用 APK 包格式。下面命令会从统一 Release 下载两个 APK（稳定文件名），并安装、启用服务：
 
 ```sh
 cd /tmp
-wget -O openrung-client.ipk https://github.com/mengxianbo/openwrt-openrung/releases/latest/download/openrung-client_x86_64.ipk
-wget -O luci-app-openrung.ipk https://github.com/mengxianbo/openwrt-openrung/releases/latest/download/luci-app-openrung_all.ipk
+wget -O openrung-client_x86_64.apk https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/openrung-client_x86_64.apk
+wget -O luci-app-openrung_all.apk https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/luci-app-openrung_all.apk
 
-opkg install --force-reinstall ./openrung-client.ipk
-opkg install --force-reinstall ./luci-app-openrung.ipk
+apk add --allow-untrusted ./openrung-client_x86_64.apk ./luci-app-openrung_all.apk
 
 uci set openrung.main.enabled='1'
 uci set openrung.main.mode='proxy'
@@ -67,6 +49,40 @@ ubus call service list '{"name":"openrung"}'
 ss -lntp 2>/dev/null | grep ':44025' || netstat -lntp 2>/dev/null | grep ':44025'
 logread -e openrung | tail -50
 ```
+
+也可以下载 [APK 合集 ZIP](https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/openrung-openwrt-25.12-x86_64-bundle.zip)，其中包含上述两个稳定命名的 APK。
+
+APK 由 OpenWrt 25.12.6 x86/64 官方 SDK 原生构建；原有 IPK 工作流继续保留，适用于使用 opkg 的旧版 OpenWrt。
+
+## 旧版 OpenWrt（opkg / IPK）命令行安装
+
+适用于仍使用 `opkg` 的 OpenWrt 版本。下面命令从统一 Release 下载稳定文件名的两个 IPK，无需手动选择版本号：
+
+```sh
+cd /tmp
+wget -O openrung-client_x86_64.ipk https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/openrung-client_x86_64.ipk
+wget -O luci-app-openrung_all.ipk https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/luci-app-openrung_all.ipk
+
+opkg install --force-reinstall ./openrung-client_x86_64.ipk
+opkg install --force-reinstall ./luci-app-openrung_all.ipk
+
+uci set openrung.main.enabled='1'
+uci set openrung.main.mode='proxy'
+uci set openrung.main.proxy_port='44025'
+uci set openrung.main.passwall_guard='1'
+uci commit openrung
+
+/etc/init.d/openrung enable
+/etc/init.d/openrung restart
+sleep 5
+
+/etc/init.d/openrung status
+ubus call service list '{"name":"openrung"}'
+ss -lntp 2>/dev/null | grep ':44025' || netstat -lntp 2>/dev/null | grep ':44025'
+logread -e openrung | tail -50
+```
+
+也可以下载 [IPK 合集 ZIP](https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/openrung-ipk.zip)，其中包含两个带版本号的 IPK 安装包。
 
 ## 许可证与源码对应关系
 
