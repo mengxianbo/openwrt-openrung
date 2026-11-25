@@ -21,6 +21,8 @@ define Package/luci-app-openrung/description
 endef
 
 define Build/Prepare
+	mkdir -p $(PKG_BUILD_DIR)
+	$(CP) ./controller.lua ./openrung.lua $(PKG_BUILD_DIR)/
 endef
 
 define Build/Compile
@@ -29,8 +31,8 @@ endef
 define Package/luci-app-openrung/install
 	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/controller
 	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/model/cbi/openrung
-	$(INSTALL_DATA) ./controller.lua $(1)/usr/lib/lua/luci/controller/openrung.lua
-	$(INSTALL_DATA) ./openrung.lua $(1)/usr/lib/lua/luci/model/cbi/openrung/main.lua
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/controller.lua $(1)/usr/lib/lua/luci/controller/openrung.lua
+	$(INSTALL_DATA) $(PKG_BUILD_DIR)/openrung.lua $(1)/usr/lib/lua/luci/model/cbi/openrung/main.lua
 	$(INSTALL_DIR) $(1)/usr/share/licenses/luci-app-openrung
 	$(INSTALL_DATA) $(TOPDIR)/LICENSE $(1)/usr/share/licenses/luci-app-openrung/LICENSE
 endef
