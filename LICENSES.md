@@ -8,7 +8,7 @@ The project permits both free and commercial redistribution. A distributor may c
 
 - The packaging scripts, OpenWrt service integration, and LuCI management code maintained in this repository are released under **GNU GPL version 3 or (at your option) any later version (GPL-3.0-or-later)**.
 - The root `LICENSE` file is the unmodified text of GNU GPL version 3. The "or later" grant for this repository's own code is stated in the project README and this file; it is not inferred merely from the license text.
-- The `openrung-client` executable is built from the separately maintained `openrung/openrung` upstream repository. Its licensing, copyright notices, and additional terms are governed by that exact upstream revision. The client APK and IPK carry the upstream `LICENSE`, project `COPYRIGHT.md`, and distributor-ready `THIRD_PARTY_NOTICES.md` in `/usr/share/openrung/`.
+- The `openrung-client` executable is built from the separately maintained `openrung/openrung` upstream repository. Its licensing, copyright notices, and additional terms are governed by that exact upstream revision. The client APK and IPK carry the upstream `LICENSE`, project `COPYRIGHT.md`, and distributor-ready `THIRD_PARTY_NOTICES.md` in `/usr/share/openrung/`. The client packages also carry the license/notice files collected from the exact vendored Go dependency tree under `/usr/share/openrung/licenses/third-party/`.
 - Third-party dependencies retain their own licenses. No license in this repository overrides or re-licenses those components.
 
 ## Source corresponding to a released client
