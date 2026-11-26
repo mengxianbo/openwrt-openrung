@@ -236,6 +236,14 @@ jobs:
                   if name not in files or not files[name].strip():
                       raise SystemExit(f"FAIL: {filename}: {name} missing or empty")
               if filename.startswith("openrung-client"):
+                  third_party = [
+                      name for name, content in files.items()
+                      if name.startswith("usr/share/openrung/licenses/third-party/")
+                      and content.strip()
+                  ]
+                  if not third_party:
+                      raise SystemExit("FAIL: APK client: bundled third-party license texts missing")
+                  print(f"PASS: APK client: {len(third_party)} third-party license/notice files verified")
                   notices = files["usr/share/openrung/THIRD_PARTY_NOTICES.md"].decode("utf-8", "replace")
                   if "<add " in notices:
                       raise SystemExit("FAIL: APK third-party notice contains unresolved placeholders")
