@@ -1,0 +1,26 @@
+diff --git a/cmd/client/main.go b/cmd/client/main.go
+--- a/cmd/client/main.go
++++ b/cmd/client/main.go
+@@ -38,6 +38,8 @@ func run(args []string) error {
+ 	switch args[0] {
+ 	case "check":
+ 		return runCheck(args[1:])
++	case "list":
++		return runList(args[1:])
+ 	case "config":
+ 		return runConfig(args[1:])
+ 	case "connect":
+@@ -104,6 +106,7 @@ func usageError() error {
+ func printUsage() {
+ 	program := filepath.Base(os.Args[0])
+ 	fmt.Fprintf(os.Stderr, `Usage:
++	  %[1]s list               Print the signed, ranked relay directory as JSON.
+ 	  %[1]s                    Launch the interactive terminal client.
+ 	  %[1]s connect            Same as bare invocation; flags seed the initial settings.
+@@ -113,6 +116,7 @@ func printUsage() {
+ 
+ Commands:
++  list     Fetch the verified relay directory and print usable ranked candidates as JSON.
+   connect  Interactive TUI by default: Relays, Logs, and Settings views
+            over the shared connection engine. With -headless, connect and
+            stream logs until interrupted.
