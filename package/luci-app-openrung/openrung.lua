@@ -56,6 +56,13 @@ country.description = translate("选择国家并保存后，节点列表会按�
 local node = s:option(ListValue, "relay_id", translate("可用 Relay 节点"))
 node:value("", translate("自动选择 / 不固定节点"))
 node.rmempty = true
+function node.validate(self, value, section)
+    local mode_value = self.map:get(section, "selection_mode") or "auto"
+    if mode_value == "manual" and (not value or value == "") then
+        return nil, translate("手动模式必须选择一个 Relay 节点")
+    end
+    return value
+end
 local filter_country = (m.uci:get("openrung", "main", "relay_country") or ""):upper()
 local count = 0
 for _, r in ipairs(relays) do
@@ -69,6 +76,14 @@ for _, r in ipairs(relays) do
         node:value(r.id, display)
         count = count + 1
     end
+end
+local saved_id = m.uci:get("openrung", "main", "relay_id") or ""
+if saved_id ~= "" then
+    local found = false
+    for _, r in ipairs(relays) do
+        if r.id == saved_id then found = true break end
+    end
+    if not found then node:value(saved_id, translate("已保存节点（当前目录未返回）：") .. saved_id) end
 end
 node.description = translate("显示真实可用节点、Relay ID、IP、端口、探测延迟和到期日期。筛选结果：") .. tostring(count)
 
