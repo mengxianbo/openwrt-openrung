@@ -21,7 +21,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: openrung-unified-release
+  group: openrung-corresponding-source
   cancel-in-progress: false
 
 jobs:
