@@ -289,12 +289,28 @@ jobs:
         run: |
           set -euo pipefail
           BUNDLE="openrung-corresponding-source-${UPSTREAM_COMMIT}.tar.gz"
+          TMP_BUNDLE="${RUNNER_TEMP}/${BUNDLE}"
+          TMP_CHECKSUM="${RUNNER_TEMP}/${BUNDLE}.sha256"
+
+          # Never write the archive into the directory being archived. Doing so
+          # changes dist/ while GNU tar is reading it and can fail with
+          # "tar: .: file changed as we read it".
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
-            --numeric-owner -czf "dist/${BUNDLE}" -C dist \
+            --numeric-owner -czf "${TMP_BUNDLE}" -C dist \
             --exclude="./${BUNDLE}" .
+
+          (
+            cd "${RUNNER_TEMP}"
+            sha256sum "${BUNDLE}" > "${BUNDLE}.sha256"
+            sha256sum -c "${BUNDLE}.sha256"
+          )
+
+          # Publish the completed and verified files into dist only after tar
+          # has finished reading the source directory.
+          mv "${TMP_BUNDLE}" "dist/${BUNDLE}"
+          mv "${TMP_CHECKSUM}" "dist/${BUNDLE}.sha256"
           (
             cd dist
-            sha256sum "${BUNDLE}" > "${BUNDLE}.sha256"
             sha256sum -c "${BUNDLE}.sha256"
           )
           echo "bundle=${BUNDLE}" >> "${GITHUB_OUTPUT}"
