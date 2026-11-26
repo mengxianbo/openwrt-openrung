@@ -160,6 +160,10 @@ jobs:
           OpenWrt SDK: 25.12.6 x86/64
           OpenRung upstream: https://github.com/openrung/openrung
           OpenRung upstream commit: ${OPENRUNG_COMMIT}
+          Corresponding-source archive:
+          https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/openrung-corresponding-source-apk-${OPENRUNG_COMMIT}.tar.gz
+          SHA256:
+          https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/openrung-corresponding-source-apk-${OPENRUNG_COMMIT}.tar.gz.sha256
           EOF
           (cd dist && sha256sum openrung-client_x86_64.apk luci-app-openrung_all.apk > APK-SHA256SUMS)
           # Bundle both installable APKs into one convenient download.
