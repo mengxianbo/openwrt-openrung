@@ -219,7 +219,7 @@ jobs:
 
           go-licenses check \
             "${IGNORE_ARGS[@]}" \
-            --disallowed_types=forbidden,restricted,unknown \
+            --disallowed_types=forbidden,unknown \
             ./cmd/client
 
           echo "===== Save remaining license files ====="
