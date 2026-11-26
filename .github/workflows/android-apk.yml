@@ -72,9 +72,6 @@ jobs:
 
       - name: Build combined OpenRung libbox native engine
         working-directory: upstream
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
-          ANDROID_NDK_ROOT: ${{ env.ANDROID_HOME }}/ndk/29.0.14206865
         run: bash android/build-libbox-release.sh
 
       - name: Verify native engine contains ARM64 and ARMv7
