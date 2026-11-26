@@ -1,4 +1,4 @@
-name: Build real OpenRung Android VPN client
+name: Build 邪剑仙 Android VPN client
 
 on:
   workflow_dispatch:
@@ -61,6 +61,9 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
 
+      - name: Apply 邪剑仙 Android branding
+        run: bash android/apply-branding.sh
+
       - name: Install JavaScript dependencies
         working-directory: upstream
         run: npm ci
@@ -104,7 +107,7 @@ jobs:
           APK="upstream/android/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           mkdir -p dist
-          cp "$APK" dist/openrung-android-debug.apk
+          cp "$APK" dist/xiejianxian-android-debug.apk
           cp upstream/LICENSE dist/OPENRUNG-LICENSE
           cp upstream/THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
           cat > dist/BUILD-INFO.txt <<EOF
@@ -121,7 +124,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: openrung-android-real-proxy-debug
+          name: xiejianxian-android-real-proxy-debug
           path: dist/*
           if-no-files-found: error
           retention-days: 30
