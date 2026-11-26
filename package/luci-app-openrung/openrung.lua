@@ -89,8 +89,8 @@ end
 local directory_status = s:option(DummyValue, "_directory", translate("真实节点目录状态"))
 function directory_status.cfgvalue()
     if not data then return directory_error end
-    return string.format("已加载 %d 个可用节点（候选上限 %d）；更新时间：%s",
-        tonumber(data.count) or #relays, tonumber(data.limit) or 0, data.fetched_at or translate("未知"))
+    return string.format("已加载 %d 个可用节点；更新时间：%s",
+        tonumber(data.count) or #relays, data.fetched_at or translate("未知"))
 end
 
 local refresh = s:option(Button, "_refresh", translate("刷新节点目录"))
