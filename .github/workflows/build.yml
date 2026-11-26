@@ -48,7 +48,7 @@ jobs:
           INPUT_REF: ${{ inputs.openrung_ref }}
         run: |
           set -eux
-          REF="${INPUT_REF:-main}"
+          REF="${INPUT_REF:-5cba4f0b9da642dcc9cc1904f861eb1d59c23a04}"
           git init upstream
           git -C upstream remote add origin https://github.com/openrung/openrung.git
           git -C upstream fetch --depth 1 origin "$REF"
