@@ -17,7 +17,11 @@ Apps configured to use the local proxy
 ```
 
 The Android app must provide:
-- OpenRung broker relay discovery and relay selection.
+- Automatic relay discovery: fetch the available relay list from the same authoritative OpenRung control-plane/source used by the existing client; do not require the user to paste node links manually.
+- Automatic relay health checks: test candidate relays with bounded timeouts, reject unreachable or incompatible relays, and rank healthy candidates by measured connection latency and successful connectivity.
+- Automatic connection: connect to the best healthy relay on startup, retry another candidate on failure, and periodically refresh the relay list. Provide a manual node override only as an optional advanced feature.
+- Persist the last successful relay as a fast-start hint, but revalidate it and fall back to discovery when it is unavailable.
+- Show relay discovery, testing, connecting, connected, and reconnecting states, including the selected relay and last error. Never display "connected" until a real end-to-end probe through the proxy succeeds.
 - An Android ARM64 / ARMv7 compatible sing-box engine.
 - A loopback-only HTTP/SOCKS5 inbound on port `44025`.
 - A VLESS + REALITY + Vision outbound matching the selected signed relay descriptor.
@@ -43,9 +47,10 @@ The Android build must package a compatible native engine for `arm64-v8a` and `a
 The current scaffold is not yet a functional proxy client. A successful Gradle build alone does not prove that proxy traffic works. Do not publish it as a usable release until:
 1. The native engine loads on both target ABIs.
 2. The local HTTP and SOCKS5 listeners accept connections only on loopback.
-3. A real relay is discovered and selected.
-4. HTTP and SOCKS5 requests pass through VLESS + REALITY + Vision to an external test endpoint.
-5. DNS behavior, stop/restart, relay failure, and app-background behavior are tested on real Android devices.
+3. The app discovers relays automatically from the authoritative OpenRung source.
+4. Relay health checks choose a reachable candidate and fail over when it stops responding.
+5. HTTP and SOCKS5 requests pass through the selected relay to an external test endpoint.
+6. DNS behavior, stop/restart, relay failure, and app-background behavior are tested on real Android devices.
 
 ## Build
 
