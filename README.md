@@ -107,7 +107,7 @@ logread -e openrung | tail -50
 
 - IPK 中的客户端来自 OpenRung 上游仓库；构建时会将上游 `LICENSE` 和 `THIRD_PARTY_NOTICES.md` 安装到 `/usr/share/openrung/`，保留第三方版权、许可证文本和适用的附加条款。
 - 每次构建会记录打包仓库与 OpenRung 上游的精确 Git commit，并在包内提供 `SOURCE-INFO.txt`。
-- 当前工作流的 Actions 源码 artifact 分别保留 30 天和 90 天，**短期 artifact 不应作为长期唯一源码提供方式**。发布二进制时，应同时在同一 Release 提供该二进制对应的完整源码归档（包括准确的打包源码、上游源码快照、必要 vendored 依赖、补丁和构建/安装脚本），并在二进制下载页直接链接到该归档；归档应在二进制仍被提供期间持续可获取。
+- Actions 源码 artifact 仍作为构建过程副本保留 30/90 天；后置源码工作流校验成功后，还会把该次 IPK 对应的完整源码包及 SHA256 文件上传到统一 `openwrt-packages` Release。源码包名包含精确上游 commit，内含打包源码、上游源码快照、vendor 依赖、许可证/第三方声明、构建元数据和校验清单。正式二进制发布时应同时保留该源码附件；APK/IPK 发布工作流的清理步骤已配置为保留这些源码附件。
 - 用户或再分发者应核对包内 `SOURCE-INFO.txt` 的精确 commit。不能用最新版源码或不匹配的构建快照代替对应源码。
 
 **注意：** 本仓库的版权声明不代表对所有第三方依赖重新授权。分发 APK/IPK 时，请保留包内许可证和第三方声明文件，并确保每个组件的许可证义务均已满足。
