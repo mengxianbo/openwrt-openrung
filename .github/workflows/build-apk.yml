@@ -70,6 +70,28 @@ jobs:
           git -C upstream checkout --detach FETCH_HEAD
           echo "OPENRUNG_COMMIT=$(git -C upstream rev-parse HEAD)" >> "$GITHUB_ENV"
 
+      - name: Collect vendored third-party license texts
+        working-directory: upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          go mod vendor
+          test -s vendor/modules.txt
+          LICENSE_DIR="$RUNNER_TEMP/openrung-third-party-licenses"
+          mkdir -p "$LICENSE_DIR"
+          count=0
+          while IFS= read -r -d '' file; do
+            rel="${file#vendor/}"
+            dest="$LICENSE_DIR/$rel"
+            mkdir -p "$(dirname "$dest")"
+            install -m 0644 "$file" "$dest"
+            count=$((count + 1))
+          done < <(find vendor -type f \\
+            \\( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \\) -print0)
+          test "$count" -gt 0
+          echo "THIRD_PARTY_LICENSES_DIR=$LICENSE_DIR" >> "$GITHUB_ENV"
+          echo "Collected $count vendored third-party license/notice files"
+
       - name: Build OpenRung Linux amd64 client
         working-directory: upstream
         env:
@@ -98,6 +120,9 @@ jobs:
           cp openrung-client.bin upstream/LICENSE upstream/THIRD_PARTY_NOTICES.md \
             "$SDK/package/openrung-client/files/"
           cp COPYRIGHT.md "$SDK/package/openrung-client/files/COPYRIGHT.md"
+          mkdir -p "$SDK/package/openrung-client/files/licenses/third-party"
+          cp -a "$THIRD_PARTY_LICENSES_DIR/." \\
+            "$SDK/package/openrung-client/files/licenses/third-party/"
           python3 - <<'PY'
           from pathlib import Path
           import re
