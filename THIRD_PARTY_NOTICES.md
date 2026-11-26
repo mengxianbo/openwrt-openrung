@@ -11,7 +11,7 @@ This repository packages or refers to software maintained by other projects. The
 - Source: built from the upstream project source at the exact commit recorded in each package's `SOURCE-INFO.txt`.
 - License and copyright: see the upstream repository's `LICENSE`, `THIRD_PARTY_NOTICES.md`, and the license files shipped with the exact source snapshot used for the build.
 
-The package build is intended to preserve the upstream license and third-party notices under `/usr/share/openrung/`. Check the actual package contents and the source snapshot for the authoritative notices applicable to a particular release.
+The package build preserves the upstream license and third-party notices under `/usr/share/openrung/` and copies license/notice files found in the exact vendored Go dependency tree to `/usr/share/openrung/licenses/third-party/`. Check the actual package contents and source snapshot for the authoritative notices applicable to a particular release.
 
 ## Other dependencies and platform components
 
