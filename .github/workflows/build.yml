@@ -172,6 +172,10 @@ jobs:
           Exact upstream source commit: ${OPENRUNG_COMMIT}
           Exact upstream source archive:
           https://github.com/openrung/openrung/archive/${OPENRUNG_COMMIT}.tar.gz
+          Corresponding-source bundle (published after successful IPK build):
+          https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/openrung-corresponding-source-${OPENRUNG_COMMIT}.tar.gz
+          SHA256:
+          https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/openrung-corresponding-source-${OPENRUNG_COMMIT}.tar.gz.sha256
 
           The installed client is built from the exact upstream commit above.
           See LICENSE and THIRD_PARTY_NOTICES.md in this directory for license
