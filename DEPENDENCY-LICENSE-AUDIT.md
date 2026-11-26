@@ -30,10 +30,13 @@ reported separately and must not be conflated.
 4. Produces the CSV license report, compiled Go package list, complete Go
    module graph, tool output, and collected license files as a separate
    90-day Actions artifact.
-5. Fails the audit for classifier categories `forbidden`, `restricted`, or
-   `unknown`. The exact modules explicitly handled as GPL are listed in a
-   separate report and checked against the pinned module graph and upstream
-   notice evidence. A report is not a legal opinion; any tool warnings, non-Go
+5. Fails the audit for `forbidden` and `unknown` classifications. It does
+   not blanket-block `restricted` copyleft licenses: the project itself and
+   documented upstream modules use GPL, so those entries must be reviewed
+   explicitly rather than misreported as incompatible. The exact modules
+   manually handled as GPL are listed in a separate report and checked against
+   the pinned module graph and upstream notice evidence. A report is not a
+   legal opinion; any tool warnings, non-Go
    code, generated assets, patent/trademark terms, NOTICE obligations, and
    special license terms still require human review.
 
@@ -56,8 +59,9 @@ the manual-dispatch option remains available for a separately specified ref.
 - GPL obligations arising from the statically linked sing-box dependency are
   expected for this upstream client and must not be treated as an unexpected
   license failure merely because they are copyleft.
-- Passing automation means the tested target produced no disallowed/unknown
-  classifications; it does not certify complete legal compliance.
+- Passing automation means the tested target produced no forbidden/unknown
+  classifications. Restricted/copyleft entries still require license-specific
+  review; this does not certify complete legal compliance.
 
 
 ## Existing #24 vendor snapshot (source artifact inspection)
