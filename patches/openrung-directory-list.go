@@ -18,7 +18,6 @@ import (
 type directoryOutput struct {
 	FetchedAt time.Time       `json:"fetched_at"`
 	Count     int             `json:"count"`
-	Limit     int             `json:"limit"`
 	Relays    []directoryItem `json:"relays"`
 }
 
@@ -54,7 +53,6 @@ func runList(args []string) error {
 	out := directoryOutput{
 		FetchedAt: time.Now().UTC(),
 		Count: len(ranked),
-		Limit: connectcore.DirectoryRelayLimit,
 		Relays: make([]directoryItem, 0, len(ranked)),
 	}
 	for _, item := range ranked {
