@@ -94,10 +94,33 @@ jobs:
           cp package/openrung-client/openrung.init "$SDK/package/openrung-client/files/"
           cp openrung-client.bin upstream/LICENSE upstream/THIRD_PARTY_NOTICES.md \
             "$SDK/package/openrung-client/files/"
+          cp COPYRIGHT.md "$SDK/package/openrung-client/files/COPYRIGHT.md"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          source = Path("upstream/THIRD_PARTY_NOTICES.md")
+          target = Path("upstream/THIRD_PARTY_NOTICES-DISTRIBUTION.md")
+          content = source.read_text(encoding="utf-8")
+          content = re.sub(
+              r"<add contact /\\s*repo issues URL>",
+              "https://github.com/mengxianbo/openwrt-openrung/issues",
+              content,
+          )
+          content = content.replace(
+              "<add public repo URL>",
+              "https://github.com/openrung/openrung",
+          )
+          if re.search(r"<add\\s+[^>]*>", content, flags=re.IGNORECASE):
+              raise SystemExit("Unresolved distributor placeholder remains in APK notices")
+          target.write_text(content, encoding="utf-8")
+          PY
+          cp upstream/THIRD_PARTY_NOTICES-DISTRIBUTION.md \
+            "$SDK/package/openrung-client/files/THIRD_PARTY_NOTICES.md"
 
           cp -a package/openrung-client/Makefile "$SDK/package/openrung-client/Makefile"
           cp -a package/luci-app-openrung "$SDK/package/"
-          cp LICENSE DISTRIBUTION-NOTICE-ADDENDUM.md "$SDK/"
+          cp LICENSE COPYRIGHT.md DISTRIBUTION-NOTICE-ADDENDUM.md "$SDK/"
 
           cd "$SDK"
           make defconfig
@@ -121,8 +144,13 @@ jobs:
           rm -f "$CLIENT_APK" "$LUCI_APK"
 
           cp upstream/LICENSE dist/OPENRUNG-UPSTREAM-LICENSE
-          cp upstream/THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
+          cp upstream/THIRD_PARTY_NOTICES-DISTRIBUTION.md dist/THIRD_PARTY_NOTICES.md
           cp LICENSE dist/PACKAGING-LICENSE
+          cp COPYRIGHT.md dist/COPYRIGHT.md
+          if grep -nE '<add[[:space:]]' dist/THIRD_PARTY_NOTICES.md; then
+            echo "Unresolved third-party notice placeholder in APK distribution" >&2
+            exit 1
+          fi
           cat > dist/SOURCE-INFO.txt <<EOF
           Packaging repository: https://github.com/${GITHUB_REPOSITORY}
           Packaging commit: ${GH_SHA}
