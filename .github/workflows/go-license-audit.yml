@@ -23,7 +23,9 @@ on:
       - ".github/workflows/build-apk.yml"
       - "package/**"
       - "COPYRIGHT.md"
+      - "LICENSE"
       - "THIRD_PARTY_NOTICES.md"
+      - "DISTRIBUTION-NOTICE-ADDENDUM.md"
       - "LICENSE-AUDIT/**"
 
 permissions:
