@@ -95,3 +95,19 @@ These package checks validate the files selected by the packaging workflow.
 A separate inspection of the final signed/unsigned APK/IPK assets is still
 required after each release; this automation is not a complete legal review
 of every native, generated, or externally supplied asset.
+
+
+## Bundled third-party license files
+
+Both package build workflows create the vendor tree from the exact upstream
+Go module graph before packaging. They copy every vendored file matching
+`LICENSE*`, `COPYING*`, or `NOTICE*` into the client package at
+`/usr/share/openrung/licenses/third-party/`. The IPK and APK package
+verification steps fail if this directory contains no non-empty license or
+notice files. This is in addition to the upstream `LICENSE`,
+`THIRD_PARTY_NOTICES.md`, project `COPYRIGHT.md`, and distributor addendum.
+
+The vendor snapshot can include modules used by other upstream packages, not
+only the selected Linux client target. Including extra license texts is
+intentional; the target-specific compiled Go package report remains the
+evidence for which Go packages are selected by the Linux amd64 client.
