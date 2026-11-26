@@ -236,6 +236,7 @@ jobs:
           PY
 
           cp LICENSE dist/PACKAGING-LICENSE
+          cp COPYRIGHT.md dist/
           cp LICENSES.md dist/
           cp DISTRIBUTION-NOTICE-ADDENDUM.md dist/
           cp DEPENDENCY-LICENSE-AUDIT.md dist/
