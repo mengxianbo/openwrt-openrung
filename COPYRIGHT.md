@@ -10,6 +10,8 @@
 
 ## Copyright scope
 
+For original material authored for this repository by the maintainer in 2026, the project copyright notice is: **Copyright (C) 2026 mengxianbo**. This notice identifies the repository maintainer's original contributions only; it does not claim ownership of upstream or third-party material, and it does not displace notices belonging to other contributors.
+
 Copyright in original files, LuCI code, packaging scripts, workflow files, documentation, and other material written for this repository belongs to the respective author(s) or rightsholder(s), subject to any third-party material and contributor rights. The repository publisher does not claim ownership of the upstream OpenRung client, OpenWrt, LuCI, Go modules, or other third-party components.
 
 Unless a file or directory contains a more specific notice, original code authored for this repository is offered under GPL-3.0-or-later. Existing copyright and license notices in upstream or third-party files remain in force and take precedence for those components.
