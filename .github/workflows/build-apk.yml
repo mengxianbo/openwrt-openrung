@@ -263,7 +263,7 @@ jobs:
             - Older OpenWrt releases using opkg: download the IPK files or openrung-ipk.zip.
 
             Individual package files are attached alongside both convenience ZIP archives.
-            This Release contains installable packages, ZIP bundles, checksums, license notices, and the matching IPK corresponding-source archive when its post-build workflow has completed.
+            This Release contains installable packages, ZIP bundles, checksums, license notices, the APK corresponding-source archive, and the matching IPK corresponding-source archive when its post-build workflow has completed.
             Source archives are named with the exact upstream commit and include SHA256 verification. Build metadata records the exact packaging and OpenRung upstream commits.
             The original OpenRung client, LuCI controls, procd service, configurable proxy port
             and PassWall guard are retained.
