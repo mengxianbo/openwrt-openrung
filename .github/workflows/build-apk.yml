@@ -121,7 +121,7 @@ jobs:
             "$SDK/package/openrung-client/files/"
           cp COPYRIGHT.md "$SDK/package/openrung-client/files/COPYRIGHT.md"
           mkdir -p "$SDK/package/openrung-client/files/licenses/third-party"
-          cp -a "$THIRD_PARTY_LICENSES_DIR/." \\
+          cp -a "$THIRD_PARTY_LICENSES_DIR/." \
             "$SDK/package/openrung-client/files/licenses/third-party/"
           python3 - <<'PY'
           from pathlib import Path
