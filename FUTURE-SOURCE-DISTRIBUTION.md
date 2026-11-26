@@ -5,7 +5,7 @@
 ## 当前下载入口与文件分工
 
 - 当前二进制统一发布页是 [OpenRung OpenWrt Packages (APK + IPK)](https://github.com/mengxianbo/openwrt-openrung/releases/tag/openwrt-packages)。
-- Release 附件包括 APK、IPK、两个安装包 ZIP 合集和 SHA256 校验文件；**对应源码归档不作为该 Release 的附件发布**。
+- Release 附件包括 APK、IPK、两个安装包 ZIP 合集、SHA256 校验文件，以及后置源码工作流上传的对应源码归档和归档 SHA256 文件。
 - IPK 构建工作流 `Build OpenRung OpenWrt IPK` 上传一个名为 `openrung-openwrt-ipk` 的 30 天 Actions artifact，其中包含该次构建的稳定名 IPK、校验文件、IPK ZIP，以及打包仓库和上游源码快照。
 - 后置源码工作流 `OpenRung Future Corresponding Source` 针对成功的 IPK 构建生成独立的 90 天 Actions artifact。请从与目标 IPK 对应的构建 run 及其关联的源码工作流下载，不能拿其他 run 或最新分支的源码代替。
 
@@ -20,6 +20,7 @@
 5. 对精确上游源码执行 `go mod vendor`，并使用相同构建标签检查 Linux amd64 客户端依赖解析。
 6. 在保留原始上游源码快照不变的前提下，额外生成包含 vendor 依赖的对应源码归档。
 7. 上传独立的 90 天 Actions artifact，包含精确打包源码、精确上游源码、vendor-inclusive 源码、许可证文本、第三方声明、发行方补充声明、构建元数据、IPK 校验和及源码 SHA256 清单。
+8. 将该次构建生成的完整源码文件集合打成单一归档 `openrung-corresponding-source-<upstream-commit>.tar.gz`，生成 SHA256 sidecar，并上传到同一个 `openwrt-packages` Release。上传前要求 Release 已存在；上传后核对两个附件名称。
 
 源码 artifact 名称包含精确上游 commit。其 `SOURCE-MANIFEST.txt` 记录两个精确 commit、目标平台、Go 工具链、构建标签和 vendor 模块数量。
 
@@ -44,7 +45,7 @@
 
 二进制统一 Release 的 tag 固定为 `openwrt-packages`，名称为 `OpenRung OpenWrt Packages (APK + IPK)`。APK 和 IPK 工作流分别更新该 Release 的不同附件；清理步骤只保留该统一 Release 及允许列表中的文件。
 
-当前源码工作流上传独立 Actions artifact，不会自动把源码归档附加到 `openwrt-packages` Release，也不会更新或覆盖该 Release。若未来决定把源码归档作为 Release 附件发布，必须将同一次构建生成的完整源码文件附加到与其二进制相同的 Release，并先同步更新 APK/IPK 两个工作流的附件保留清单，避免后续清理时误删。
+源码工作流会把匹配该次 IPK 构建的完整源码归档及 SHA256 sidecar 附加到 `openwrt-packages` Release。APK 和 IPK 两个发布工作流共用 `openrung-unified-release` 并发锁；两个工作流的旧附件清理逻辑均显式保留 `openrung-corresponding-source-*.tar.gz` 与其 `.sha256` 文件，避免后续发布时误删源码附件。源码仍同时保留为 90 天 Actions artifact，方便从构建记录单独取回。
 
 ## 历史构建隔离
 
