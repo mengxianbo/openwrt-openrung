@@ -35,6 +35,7 @@ define Package/luci-app-openrung/install
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/openrung.lua $(1)/usr/lib/lua/luci/model/cbi/openrung/main.lua
 	$(INSTALL_DIR) $(1)/usr/share/licenses/luci-app-openrung
 	$(INSTALL_DATA) $(TOPDIR)/LICENSE $(1)/usr/share/licenses/luci-app-openrung/LICENSE
+	$(INSTALL_DATA) $(TOPDIR)/COPYRIGHT.md $(1)/usr/share/licenses/luci-app-openrung/COPYRIGHT.md
 endef
 
 $(eval $(call BuildPackage,luci-app-openrung))
