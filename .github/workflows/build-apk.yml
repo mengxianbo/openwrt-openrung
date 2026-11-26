@@ -168,7 +168,9 @@ jobs:
             gh api "repos/$GH_REPO/releases/$RELEASE_ID/assets" --paginate --jq '.[].id' |
             while read -r asset_id; do
               name="$(gh api "repos/$GH_REPO/releases/assets/$asset_id" --jq .name)"
-              if ! printf '%s\n' "$KEEP" | grep -Fxq "$name"; then
+              if ! printf '%s\n' "$KEEP" | grep -Fxq "$name" \
+                 && [[ "$name" != openrung-corresponding-source-*.tar.gz ]] \
+                 && [[ "$name" != openrung-corresponding-source-*.tar.gz.sha256 ]]; then
                 echo "Removing obsolete asset: $name"
                 gh api --method DELETE "repos/$GH_REPO/releases/assets/$asset_id"
               fi
