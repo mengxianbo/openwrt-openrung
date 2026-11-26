@@ -157,7 +157,7 @@ jobs:
             CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
               go list -mod=vendor -tags='with_utls,with_external_windivert' ./cmd/client >/dev/null
           )
-          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
+          tar --exclude='./.git' --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
             --numeric-owner -cf - -C upstream . | gzip -n \
             > "${SRC}/upstream/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}-with-vendor.tar.gz"
 
