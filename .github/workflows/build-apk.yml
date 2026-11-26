@@ -144,6 +144,7 @@ jobs:
           retention-days: 30
 
       - name: Remove obsolete release assets and old releases
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
