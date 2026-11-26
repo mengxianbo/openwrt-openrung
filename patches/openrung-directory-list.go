@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,6 +16,41 @@ import (
 
 // directoryOutput deliberately exposes only public, signed directory fields.
 // Client credentials and transport secrets are never included in this UI API.
+const directoryCachePath = "/tmp/openrung-directory-list.json"
+const directoryCacheTTL = 30 * time.Second
+
+func writeDirectoryJSON(out directoryOutput) error {
+    var buf bytes.Buffer
+    enc := json.NewEncoder(&buf)
+    enc.SetIndent("", "  ")
+    if err := enc.Encode(out); err != nil {
+        return err
+    }
+    tmp := directoryCachePath + ".tmp"
+    if err := os.WriteFile(tmp, buf.Bytes(), 0600); err != nil {
+        return err
+    }
+    if err := os.Rename(tmp, directoryCachePath); err != nil {
+        _ = os.Remove(tmp)
+        return err
+    }
+    _, err := os.Stdout.Write(buf.Bytes())
+    return err
+}
+
+func printFreshDirectoryCache() bool {
+    info, err := os.Stat(directoryCachePath)
+    if err != nil || time.Since(info.ModTime()) >= directoryCacheTTL {
+        return false
+    }
+    data, err := os.ReadFile(directoryCachePath)
+    if err != nil || !json.Valid(data) {
+        return false
+    }
+    _, err = os.Stdout.Write(data)
+    return err == nil
+}
+
 type directoryOutput struct {
 	FetchedAt time.Time       `json:"fetched_at"`
 	Count     int             `json:"count"`
@@ -64,7 +100,5 @@ func runList(args []string) error {
 			ProbeMS: item.ProbeMS, ExpiresAt: r.ExpiresAt,
 		})
 	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(out)
+	return writeDirectoryJSON(out)
 }
