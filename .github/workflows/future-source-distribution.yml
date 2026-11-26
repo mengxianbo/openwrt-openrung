@@ -18,10 +18,10 @@ on:
 
 permissions:
   actions: read
-  contents: read
+  contents: write
 
 concurrency:
-  group: openrung-corresponding-source-${{ github.event.workflow_run.id || inputs.build_run_id }}
+  group: openrung-unified-release
   cancel-in-progress: false
 
 jobs:
@@ -279,6 +279,45 @@ jobs:
           tar -tzf "openrung-upstream-source-${{ steps.source.outputs.upstream_commit }}.tar.gz" >/dev/null
           tar -tzf "openrung-upstream-corresponding-source-${{ steps.source.outputs.upstream_commit }}-with-vendor.tar.gz" >/dev/null
           echo "PASS: exact packaging source, exact upstream source, vendored dependencies, notices, licenses, and SHA256 manifests verified."
+
+      - name: Create one complete Release source bundle
+        id: release_bundle
+        shell: bash
+        env:
+          PACKAGING_COMMIT: ${{ steps.source.outputs.packaging_commit }}
+          UPSTREAM_COMMIT: ${{ steps.source.outputs.upstream_commit }}
+        run: |
+          set -euo pipefail
+          BUNDLE="openrung-corresponding-source-${UPSTREAM_COMMIT}.tar.gz"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
+            --numeric-owner -czf "dist/${BUNDLE}" -C dist \
+            --exclude="./${BUNDLE}" .
+          (
+            cd dist
+            sha256sum "${BUNDLE}" > "${BUNDLE}.sha256"
+            sha256sum -c "${BUNDLE}.sha256"
+          )
+          echo "bundle=${BUNDLE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Publish matching source bundle to the unified GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BUNDLE: ${{ steps.release_bundle.outputs.bundle }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view openwrt-packages --repo "${GH_REPO}" >/dev/null 2>&1; then
+            echo "The unified openwrt-packages Release does not exist yet; refusing to create a detached source release." >&2
+            exit 1
+          fi
+          gh release upload openwrt-packages "dist/${BUNDLE}" "dist/${BUNDLE}.sha256" \
+            --repo "${GH_REPO}" --clobber
+          gh release view openwrt-packages --repo "${GH_REPO}" --json assets \
+            --jq '.assets[].name' | grep -Fx "${BUNDLE}"
+          gh release view openwrt-packages --repo "${GH_REPO}" --json assets \
+            --jq '.assets[].name' | grep -Fx "${BUNDLE}.sha256"
+          echo "Published corresponding source bundle and SHA256 to openwrt-packages."
 
       - name: Upload future-build corresponding-source artifact
         uses: actions/upload-artifact@v4
