@@ -86,7 +86,7 @@ jobs:
                           for member in data.getmembers():
                               if member.isfile() and member.name.endswith("/SOURCE-INFO.txt"):
                                   raw = data.extractfile(member).read().decode("utf-8", "replace")
-                                  match = re.search(r"Exact upstream source commit:\\s*([0-9a-f]{40})", raw)
+                                  match = re.search(r"Exact upstream source commit:\s*([0-9a-f]{40})", raw)
                                   if match:
                                       found.add(match.group(1))
           elif event_workflow == "Build OpenRung OpenWrt 25.12 APK":
@@ -94,7 +94,7 @@ jobs:
               if not info.is_file():
                   raise SystemExit("APK artifact is missing SOURCE-INFO.txt")
               raw = info.read_text(encoding="utf-8")
-              match = re.search(r"OpenRung upstream commit:\\s*([0-9a-f]{40})", raw)
+              match = re.search(r"OpenRung upstream commit:\s*([0-9a-f]{40})", raw)
               if match:
                   found.add(match.group(1))
           else:
