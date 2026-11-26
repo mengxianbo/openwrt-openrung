@@ -70,6 +70,9 @@ type directoryItem struct {
 }
 
 func runList(args []string) error {
+	if printFreshDirectoryCache() {
+		return nil
+	}
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
 		return err
