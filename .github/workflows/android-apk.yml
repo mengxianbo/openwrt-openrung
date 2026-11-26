@@ -115,12 +115,14 @@ jobs:
           Packaging commit: ${GITHUB_SHA}
           Android application source: https://github.com/openrung/openrung-mobile-app
           Android application source commit: 3a68a6fc15ddd4a13873f0196abbc1b49db87354
+          Android app display name: 邪剑仙
+          Android launcher icon: red hellfire sword
           Native engine: OpenRung punchbridge grafted into sing-box libbox
           Android capture: VpnService + TUN
           Native ABIs: arm64-v8a, armeabi-v7a, x86, x86_64
           Build type: debug (debug signing; not a production release)
           EOF
-          sha256sum dist/openrung-android-debug.apk > dist/SHA256SUMS
+          sha256sum dist/xiejianxian-android-debug.apk > dist/SHA256SUMS
 
       - uses: actions/upload-artifact@v4
         with:
