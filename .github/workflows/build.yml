@@ -48,7 +48,7 @@ jobs:
           INPUT_REF: ${{ inputs.openrung_ref }}
         run: |
           set -eux
-          # Feature branch build applies the directory-list patch without publishing releases.
+          # Feature branch build applies the minimal directory-list patch without publishing releases.
           REF="${INPUT_REF:-5cba4f0b9da642dcc9cc1904f861eb1d59c23a04}"
           git init upstream
           git -C upstream remote add origin https://github.com/openrung/openrung.git
