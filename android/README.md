@@ -1,6 +1,6 @@
-# OpenRung Android client
+# 邪剑仙 Android 客户端
 
-This branch builds a real Android VPN client from the OpenRung mobile application source, including its native Go/libbox engine and Android VPN host. It is separate from the OpenWrt packages and LuCI code.
+本分支构建真正具备代理连接能力的 Android VPN 客户端，应用显示名称为 **邪剑仙**，图标采用红色地狱火与长剑主题。客户端复用 OpenRung 移动端原生 Go/libbox 引擎及 Android VPN 宿主实现。此工作与 OpenWrt 软件包和 LuCI 页面分离。
 
 ## Actual traffic path
 
@@ -21,14 +21,14 @@ Android applications
 
 ## Build
 
-Run **Actions → Build real OpenRung Android VPN client → Run workflow** on `feature/android-client`.
+运行 **Actions → Build 邪剑仙 Android VPN client → Run workflow**，分支选择 `feature/android-client`。
 
 The workflow:
 1. Checks out the pinned OpenRung mobile application source.
 2. Builds the combined sing-box/libbox + OpenRung native engine.
 3. Verifies ARM64 and ARMv7 native libraries.
 4. Compiles the Android application and runs its JVM unit tests.
-5. Uploads `openrung-android-debug.apk`, source licenses, build provenance, and SHA-256.
+5. Uploads `xiejianxian-android-debug.apk`, source licenses, build provenance, and SHA-256.
 
 The uploaded APK is a debug build for installation and functional testing. It is not a production-signed release.
 
