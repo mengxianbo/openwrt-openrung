@@ -120,6 +120,12 @@ jobs:
           addendum = data.get("usr/share/openrung/DISTRIBUTION-NOTICE-ADDENDUM.md", b"")
           if not info or not license_text.strip() or not notices.strip() or not copyright_text.strip() or not addendum.strip():
               raise SystemExit("Client IPK is missing SOURCE-INFO, LICENSE, COPYRIGHT, THIRD_PARTY_NOTICES, or distribution addendum")
+          third_party_licenses = [
+              name for name, payload in data.items()
+              if name.startswith("usr/share/openrung/licenses/third-party/") and payload.strip()
+          ]
+          if not third_party_licenses:
+              raise SystemExit("Client IPK is missing vendored third-party license/notice files")
           notice_text = notices.decode("utf-8", "replace")
           if "<add " in notice_text:
               raise SystemExit("Unresolved upstream distributor placeholder in packaged third-party notices")
