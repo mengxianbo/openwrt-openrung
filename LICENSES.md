@@ -43,7 +43,10 @@ an explicit upstream ref for a manual historical audit. It applies the same
 
 The report artifact includes the compiled Go package list, module graph,
 `go-licenses` CSV, collected license files, and tool logs. The workflow
-fails on forbidden, restricted, or unknown classifications. This is a
+blocks forbidden and unknown classifications. It does not blanket-block the
+scanner's Restricted category because GPL copyleft code is intentionally part
+of this project; Restricted entries must be reviewed license-by-license and
+must not be assumed compatible solely because the build passes. This is a
 screening control, not a substitute for manual review of copyright, NOTICE,
 patent, trademark, additional terms, or non-Go/native components. See
 [DEPENDENCY-LICENSE-AUDIT.md](DEPENDENCY-LICENSE-AUDIT.md).
