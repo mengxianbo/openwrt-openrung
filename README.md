@@ -157,6 +157,8 @@ logread -e openrung | tail -50
 
 **OPENWRT × OPENRUNG — BUILT FOR THE COMMUNITY**
 
-[⭐ Star this project](https://github.com/mengxianbo/openwrt-openrung) · [View Repository](https://github.com/mengxianbo/openwrt-openrung)
+[⭐ Star this project](https://github.com/mengxianbo/openwrt-openrung) · [View Repository](https://github.com/mengxianbo/openwrt-openrung) · [Contact](mailto:mengxianbo556677@gmail.com)
+
+**联系邮箱：** [mengxianbo556677@gmail.com](mailto:mengxianbo556677@gmail.com)
 
 </div>
