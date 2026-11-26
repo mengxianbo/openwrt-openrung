@@ -103,7 +103,7 @@ jobs:
           target = Path("upstream/THIRD_PARTY_NOTICES-DISTRIBUTION.md")
           content = source.read_text(encoding="utf-8")
           content = re.sub(
-              r"<add contact /\\s*repo issues URL>",
+              r"<add contact /\s*repo issues URL>",
               "https://github.com/mengxianbo/openwrt-openrung/issues",
               content,
           )
@@ -111,7 +111,7 @@ jobs:
               "<add public repo URL>",
               "https://github.com/openrung/openrung",
           )
-          if re.search(r"<add\\s+[^>]*>", content, flags=re.IGNORECASE):
+          if re.search(r"<add\s+[^>]*>", content, flags=re.IGNORECASE):
               raise SystemExit("Unresolved distributor placeholder remains in APK notices")
           target.write_text(content, encoding="utf-8")
           PY
