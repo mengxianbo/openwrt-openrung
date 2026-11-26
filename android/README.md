@@ -1,19 +1,22 @@
 # OpenRung Android
 
-Android companion client developed in this repository. This project is separate from the OpenWrt package build but shares the repository and release location.
+Android companion client developed in this repository. It shares this repository with the OpenWrt package, while keeping its Gradle build and workflow separate.
 
-## Planned modes
+## Scope: local proxy only
 
-- Local proxy: expose configurable loopback HTTP and SOCKS5 listeners; no Android VPN interface.
-- VPN: Android `VpnService` routes device traffic into the OpenRung Android data plane.
-- Shared node management and connection status.
+The Android client will expose a local HTTP and SOCKS5 proxy backed by the Android-compatible OpenRung data plane.
 
-## Important implementation boundary
+- No Android VPN permission or `VpnService`.
+- No TUN interface and no device-wide traffic interception.
+- Apps that support manual proxy configuration can connect to the local listener.
+- The app will provide node import/management, node selection, start/stop, listener address and port, connection status, and logs.
 
-The current OpenWrt package builds a Linux amd64 CLI. That executable is not an Android ARM binary and must not be bundled into the Android app. The Android data plane must be built for Android ABIs and integrated through a supported library/API or a dedicated Android build of the upstream core.
+## Core integration requirement
 
-The initial Android scaffold is not yet a functional proxy/VPN client. VPN permission/service scaffolding does not itself provide packet forwarding. Do not publish it as a usable release until both data paths, node configuration, lifecycle handling, and device tests pass.
+The OpenWrt package's Linux amd64 executable cannot run on Android ARM devices. The Android app must bundle or build a compatible Android engine for `arm64-v8a` and `armeabi-v7a`, and configure a local HTTP/SOCKS5 inbound that forwards through the OpenRung relay transport.
+
+The current scaffold is not yet a functional proxy client. A successful Gradle build alone does not prove that proxy traffic works. Do not publish it as a usable release until the Android engine is integrated and both local proxy protocols are tested on real devices.
 
 ## Build
 
-The Android workflow builds a debug APK for early CI validation. A signed release requires repository Actions secrets for the Android signing keystore and credentials; never commit signing material.
+The Android workflow builds a debug APK for early UI/CI validation. A signed release requires repository Actions secrets for the Android signing keystore and credentials; never commit signing material.
