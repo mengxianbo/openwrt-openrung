@@ -227,7 +227,7 @@ jobs:
                   if data_member is None:
                       raise SystemExit(f"FAIL: {filename}: APK data archive missing")
                   data_blob = outer.extractfile(data_member).read()
-              with tarfile.open(fileobj=io.BytesIO(data_blob), mode="r:gz") as data:
+              with tarfile.open(fileobj=io.BytesIO(data_blob), mode="r:*") as data:
                   files = {
                       m.name.removeprefix("./"): data.extractfile(m).read()
                       for m in data.getmembers() if m.isfile()
