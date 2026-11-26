@@ -55,6 +55,8 @@ define Package/openrung-client/install
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/LICENSE $(1)/usr/share/openrung/LICENSE
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/COPYRIGHT.md $(1)/usr/share/openrung/COPYRIGHT.md
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/THIRD_PARTY_NOTICES.md $(1)/usr/share/openrung/THIRD_PARTY_NOTICES.md
+	$(INSTALL_DIR) $(1)/usr/share/openrung/licenses/third-party
+	$(CP) $(PKG_BUILD_DIR)/licenses/third-party/. $(1)/usr/share/openrung/licenses/third-party/
 endef
 
 $(eval $(call BuildPackage,openrung-client))
