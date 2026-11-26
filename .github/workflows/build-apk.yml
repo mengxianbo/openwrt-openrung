@@ -21,7 +21,7 @@ concurrency:
   # Serialize APK and IPK publication to the same unified Release.
   # The workflows publish distinct asset filenames and must not clean up each other's files.
   group: openrung-unified-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -182,6 +182,7 @@ jobs:
           done
 
       - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: openwrt-packages
