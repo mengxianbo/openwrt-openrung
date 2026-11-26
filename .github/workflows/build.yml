@@ -13,6 +13,10 @@ on:
       - "package/**"
       - "!package/luci-app-webrtc-guard/**"
       - "README.md"
+      - "COPYRIGHT.md"
+      - "LICENSE"
+      - "THIRD_PARTY_NOTICES.md"
+      - "DISTRIBUTION-NOTICE-ADDENDUM.md"
       - ".github/workflows/build.yml"
 
 permissions:
