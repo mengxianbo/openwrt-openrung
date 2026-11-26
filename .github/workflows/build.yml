@@ -118,6 +118,8 @@ jobs:
 
           cp upstream/LICENSE \
             work/client/usr/share/openrung/LICENSE
+          install -m 0644 COPYRIGHT.md \
+            work/client/usr/share/openrung/COPYRIGHT.md
 
           if [ -f upstream/THIRD_PARTY_NOTICES.md ]; then
             cp upstream/THIRD_PARTY_NOTICES.md \
@@ -173,6 +175,7 @@ jobs:
           EOF
 
           cp LICENSE work/luci/usr/share/licenses/luci-app-openrung/LICENSE
+          cp COPYRIGHT.md work/luci/usr/share/licenses/luci-app-openrung/COPYRIGHT.md
           cat > work/luci/usr/share/licenses/luci-app-openrung/SOURCE-INFO.txt <<EOF
           LuCI package source:
           https://github.com/mengxianbo/openwrt-openrung
@@ -391,12 +394,25 @@ jobs:
                   raise SystemExit(f"FAIL: {package.name}: embedded LICENSE missing or empty")
               print(f"PASS: {package.name}: GPL-3.0-or-later metadata and embedded LICENSE verified")
 
+          for package, _, package_name in checks:
+              _, data = inspect_ipk(package)
+              copyright_path = (
+                  "usr/share/openrung/COPYRIGHT.md" if package_name == "openrung-client"
+                  else "usr/share/licenses/luci-app-openrung/COPYRIGHT.md"
+              )
+              if copyright_path not in data or not data[copyright_path].strip():
+                  raise SystemExit(f"FAIL: {package_name}: project COPYRIGHT.md missing or empty")
+              print(f"PASS: {package_name}: project copyright notice verified")
+
           client = checks[0][0]
           _, client_data = inspect_ipk(client)
           notices = client_data.get("usr/share/openrung/THIRD_PARTY_NOTICES.md", b"")
           if not notices.strip():
               raise SystemExit("FAIL: openrung-client: third-party notices missing or empty")
-          print("PASS: openrung-client: third-party notices verified")
+          notice_text = notices.decode("utf-8", "replace")
+          if "<add " in notice_text:
+              raise SystemExit("FAIL: openrung-client: unresolved third-party notice placeholder")
+          print("PASS: openrung-client: third-party notices verified; no placeholders remain")
           PY
 
       - name: Upload packages as workflow artifact
