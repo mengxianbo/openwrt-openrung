@@ -41,6 +41,10 @@ start_service() {
 
     config_get selection_mode main selection_mode auto
     config_get relay_id main relay_id
+    if [ "$selection_mode" = "manual" ] && [ -z "$relay_id" ]; then
+        logger -t openrung "Manual selection requires a Relay ID; refusing automatic fallback"
+        return 1
+    fi
     config_get relay_country main relay_country
     config_get relay_label main relay_label
 
