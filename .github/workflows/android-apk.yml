@@ -1,0 +1,167 @@
+name: Build 邪剑仙 Android VPN client
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/android-client
+    paths:
+      - ".github/workflows/android-apk.yml"
+      - "android/**"
+      - "README.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-real-proxy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-real-client:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout packaging repository
+        uses: actions/checkout@v4
+
+      # Build the upstream Android application that contains the production
+      # VpnService/TUN host and the matching OpenRung native engine bindings.
+      # Pin the exact upstream commit so this build is reproducible.
+      - name: Checkout OpenRung mobile application source
+        uses: actions/checkout@v4
+        with:
+          repository: openrung/openrung-mobile-app
+          ref: 3a68a6fc15ddd4a13873f0196abbc1b49db87354
+          path: upstream
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: upstream/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.5"
+          cache-dependency-path: upstream/android/punchbridge/go.sum
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android NDK versions required by native and APK builds
+        run: |
+          sdkmanager "ndk;29.0.14206865" "ndk;27.1.12297006"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+
+      - name: Apply 邪剑仙 Android branding
+        run: bash android/apply-branding.sh
+
+      - name: Install JavaScript dependencies
+        working-directory: upstream
+        run: npm ci
+
+      - name: Install gomobile bindings toolchain
+        run: |
+          go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.12
+          go install github.com/sagernet/gomobile/cmd/gobind@v0.1.12
+
+      - name: Build combined OpenRung libbox native engine
+        working-directory: upstream
+        run: bash android/build-libbox-release.sh
+
+      - name: Verify native engine contains ARM64 and ARMv7
+        working-directory: upstream
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          path = "android/app/libs/libbox.aar"
+          required = {
+              "jni/arm64-v8a/libbox.so",
+              "jni/armeabi-v7a/libbox.so",
+          }
+          with zipfile.ZipFile(path) as archive:
+              names = set(archive.namelist())
+          missing = required - names
+          if missing:
+              raise SystemExit("libbox.aar missing ABI libraries: " + ", ".join(sorted(missing)))
+          print("Verified ARM64 and ARMv7 libbox native libraries")
+          PY
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Fail early with a useful HTTP status if the Gradle Plugin Portal cannot
+      # serve the React Native settings plugin marker used by this pinned source.
+      - name: Check Foojay Gradle plugin availability
+        run: |
+          set -euo pipefail
+          PLUGIN_POM="https://plugins.gradle.org/m2/org/gradle/toolchains/foojay-resolver-convention/org.gradle.toolchains.foojay-resolver-convention.gradle.plugin/1.0.0/org.gradle.toolchains.foojay-resolver-convention.gradle.plugin-1.0.0.pom"
+          curl --fail --show-error --location \
+            --retry 5 --retry-all-errors --retry-delay 3 \
+            --connect-timeout 20 --max-time 90 \
+            "$PLUGIN_POM" -o /tmp/foojay-plugin-marker.pom
+          echo "Foojay plugin marker downloaded successfully:"
+          sed -n '1,40p' /tmp/foojay-plugin-marker.pom
+
+      - name: Compile real Android VPN client
+        working-directory: upstream/android
+        shell: bash
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            echo "Gradle build attempt $attempt/3"
+            if [ "$attempt" -eq 1 ]; then
+              ./gradlew --no-daemon --refresh-dependencies \
+                :app:assembleDebug :app:testDebugUnitTest --stacktrace --info
+            else
+              ./gradlew --no-daemon \
+                :app:assembleDebug :app:testDebugUnitTest --stacktrace --info
+            fi
+            result=$?
+            if [ "$result" -eq 0 ]; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Gradle failed with exit code $result; retrying after 15 seconds."
+              sleep 15
+            fi
+          done
+          echo "Gradle failed after 3 attempts."
+          exit 1
+
+      - name: Verify APK and record source provenance
+        run: |
+          set -eux
+          APK="upstream/android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          mkdir -p dist
+          cp "$APK" dist/xiejianxian-android-debug.apk
+          cp upstream/LICENSE dist/OPENRUNG-LICENSE
+          cp upstream/THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
+          cat > dist/BUILD-INFO.txt <<EOF
+          Packaging repository: ${GITHUB_REPOSITORY}
+          Packaging commit: ${GITHUB_SHA}
+          Android application source: https://github.com/openrung/openrung-mobile-app
+          Android application source commit: 3a68a6fc15ddd4a13873f0196abbc1b49db87354
+          Android app display name: 邪剑仙
+          Android launcher icon: red hellfire sword
+          Native engine: OpenRung punchbridge grafted into sing-box libbox
+          Android capture: VpnService + TUN
+          Native ABIs: arm64-v8a, armeabi-v7a, x86, x86_64
+          Build type: debug (debug signing; not a production release)
+          EOF
+          sha256sum dist/xiejianxian-android-debug.apk > dist/SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xiejianxian-android-real-proxy-debug
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
