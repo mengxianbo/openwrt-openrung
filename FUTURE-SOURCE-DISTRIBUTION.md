@@ -41,11 +41,15 @@
 
 **不要**将当前 `main` 分支源码、其他构建 run 的 artifact，或历史 Build #24 的源码用于替代某个 IPK 的对应源码。
 
+## APK 对应源码
+
+OpenWrt 25.12 APK 由 `.github/workflows/build-apk.yml` 构建。该工作流在生成 APK 后，使用同一构建 commit 和同一 OpenRung upstream commit 生成 vendor-inclusive 对应源码归档，并将归档及 SHA256 sidecar 随 APK 一起附加到统一 `openwrt-packages` Release。归档名称以 `openrung-corresponding-source-apk-` 开头。APK 构建 artifact 也保留该归档副本 30 天。
+
 ## Release 发布规则
 
 二进制统一 Release 的 tag 固定为 `openwrt-packages`，名称为 `OpenRung OpenWrt Packages (APK + IPK)`。APK 和 IPK 工作流分别更新该 Release 的不同附件；清理步骤只保留该统一 Release 及允许列表中的文件。
 
-源码工作流会把匹配该次 IPK 构建的完整源码归档及 SHA256 sidecar 附加到 `openwrt-packages` Release。APK 和 IPK 两个发布工作流共用 `openrung-unified-release` 并发锁；两个工作流的旧附件清理逻辑均显式保留 `openrung-corresponding-source-*.tar.gz` 与其 `.sha256` 文件，避免后续发布时误删源码附件。源码仍同时保留为 90 天 Actions artifact，方便从构建记录单独取回。
+APK 构建工作流会直接附加 APK 对应源码；IPK 后置源码工作流会把匹配该次 IPK 构建的完整源码归档及 SHA256 sidecar 附加到 `openwrt-packages` Release。APK 和 IPK 两个发布工作流共用 `openrung-unified-release` 并发锁；两个工作流的旧附件清理逻辑均显式保留 `openrung-corresponding-source-*.tar.gz` 与其 `.sha256` 文件，避免后续发布时误删源码附件。源码仍同时保留为 90 天 Actions artifact，方便从构建记录单独取回。
 
 ## 历史构建隔离
 
