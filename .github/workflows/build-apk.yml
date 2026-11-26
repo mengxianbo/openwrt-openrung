@@ -197,12 +197,23 @@ jobs:
 
       - name: Verify APK license and copyright payloads
         shell: bash
+        env:
+          SDK_DIR: ${{ env.SDK_DIR }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import io
-          import tarfile
+          import os
+          import subprocess
           from pathlib import Path
+
+          sdk = Path(os.environ["SDK_DIR"])
+          candidates = [
+              sdk / "staging_dir/host/bin/apk",
+              sdk / "staging_dir/hostpkg/bin/apk",
+          ]
+          apk_tool = next((p for p in candidates if p.is_file() and os.access(p, os.X_OK)), None)
+          if apk_tool is None:
+              raise SystemExit("FAIL: OpenWrt SDK host apk-tools v3 executable not found")
 
           checks = {
               "openrung-client_x86_64.apk": [
@@ -217,37 +228,35 @@ jobs:
           }
 
           for filename, required in checks.items():
-              path = Path("dist") / filename
-              with tarfile.open(path, "r:*") as outer:
-                  data_member = next(
-                      (m for m in outer.getmembers()
-                       if m.isfile() and m.name.endswith("data.tar.gz")),
-                      None,
-                  )
-                  if data_member is None:
-                      raise SystemExit(f"FAIL: {filename}: APK data archive missing")
-                  data_blob = outer.extractfile(data_member).read()
-              with tarfile.open(fileobj=io.BytesIO(data_blob), mode="r:*") as data:
-                  files = {
-                      m.name.removeprefix("./"): data.extractfile(m).read()
-                      for m in data.getmembers() if m.isfile()
-                  }
+              package = Path("dist") / filename
+              destination = Path("verify") / package.stem
+              destination.mkdir(parents=True, exist_ok=True)
+              subprocess.run(
+                  [
+                      str(apk_tool), "extract", "--allow-untrusted", "--no-chown",
+                      "--destination", str(destination), str(package),
+                  ],
+                  check=True,
+              )
               for name in required:
-                  if name not in files or not files[name].strip():
+                  path = destination / name
+                  if not path.is_file() or not path.read_bytes().strip():
                       raise SystemExit(f"FAIL: {filename}: {name} missing or empty")
               if filename.startswith("openrung-client"):
-                  third_party = [
-                      name for name, content in files.items()
-                      if name.startswith("usr/share/openrung/licenses/third-party/")
-                      and content.strip()
-                  ]
-                  if not third_party:
-                      raise SystemExit("FAIL: APK client: bundled third-party license texts missing")
-                  print(f"PASS: APK client: {len(third_party)} third-party license/notice files verified")
-                  notices = files["usr/share/openrung/THIRD_PARTY_NOTICES.md"].decode("utf-8", "replace")
+                  notices = (destination / "usr/share/openrung/THIRD_PARTY_NOTICES.md").read_text(
+                      encoding="utf-8", errors="replace"
+                  )
                   if "<add " in notices:
                       raise SystemExit("FAIL: APK third-party notice contains unresolved placeholders")
-              print(f"PASS: {filename}: license, copyright and required notices verified")
+                  license_dir = destination / "usr/share/openrung/licenses/third-party"
+                  license_files = [
+                      p for p in license_dir.rglob("*")
+                      if p.is_file() and p.read_bytes().strip()
+                  ] if license_dir.is_dir() else []
+                  if not license_files:
+                      raise SystemExit("FAIL: APK client: bundled third-party license texts missing")
+                  print(f"PASS: APK client: {len(license_files)} vendored license/notice files verified")
+              print(f"PASS: {filename}: embedded license and copyright files verified")
           PY
 
       - name: Assemble exact APK corresponding-source archive
