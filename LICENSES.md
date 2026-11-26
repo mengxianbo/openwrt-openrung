@@ -8,17 +8,19 @@ The project permits both free and commercial redistribution. A distributor may c
 
 - The packaging scripts, OpenWrt service integration, and LuCI management code maintained in this repository are released under **GNU GPL version 3 or (at your option) any later version (GPL-3.0-or-later)**.
 - The root `LICENSE` file is the unmodified text of GNU GPL version 3. The "or later" grant for this repository's own code is stated in the project README and this file; it is not inferred merely from the license text.
-- The `openrung-client` executable is built from the separately maintained `openrung/openrung` upstream repository. Its licensing, copyright notices, and additional terms are governed by that exact upstream revision. The client IPK carries the upstream `LICENSE` and `THIRD_PARTY_NOTICES.md` in `/usr/share/openrung/`.
+- The `openrung-client` executable is built from the separately maintained `openrung/openrung` upstream repository. Its licensing, copyright notices, and additional terms are governed by that exact upstream revision. The client APK and IPK carry the upstream `LICENSE`, project `COPYRIGHT.md`, and distributor-ready `THIRD_PARTY_NOTICES.md` in `/usr/share/openrung/`.
 - Third-party dependencies retain their own licenses. No license in this repository overrides or re-licenses those components.
 
 ## Source corresponding to a released client
 
-For every IPK build, the build workflow records the exact packaging-repository commit and exact OpenRung upstream commit in the client IPK's `SOURCE-INFO.txt`.
+For every APK/IPK build, the build workflow records the exact packaging-repository commit and exact OpenRung upstream commit in the client package's `SOURCE-INFO.txt`.
 
 Each successful build's `openrung-openwrt-ipk` Actions artifact contains:
 
 1. `openwrt-openrung-source-<packaging-commit>.tar.gz` — exact packaging repository source, including the scripts used to assemble the IPKs.
 2. `openrung-upstream-source-<upstream-commit>.tar.gz` — exact upstream source snapshot, including `go.mod`, `go.sum`, and upstream notices.
+
+For APK builds, the APK workflow creates and publishes its own exact packaging-source snapshot and vendor-inclusive upstream corresponding-source archive, together with SHA256 files. The APK package metadata links to that exact release asset.
 
 For future successful builds after `.github/workflows/future-source-distribution.yml` is merged, that workflow automatically downloads the exact build artifact, reads and checks the IPK's `SOURCE-INFO.txt`, generates a vendor-inclusive corresponding-source archive from the exact upstream source snapshot using `go mod vendor`, verifies the target-specific Go package graph, and uploads a separate 90-day source artifact. The artifact includes the packaging and upstream source snapshots, vendor-inclusive source, license texts, third-party notices, distributor addendum, build manifest, original IPK checksums, and source SHA256 manifests. See [FUTURE-SOURCE-DISTRIBUTION.md](FUTURE-SOURCE-DISTRIBUTION.md).
 
@@ -28,7 +30,7 @@ The existing IPK build workflow deliberately separates building from Release pub
 
 ## Limits of automated checks
 
-The automated workflows verify the tested license files, notices, commit identity, source archives, and presence of vendored dependency source. The Go dependency audit separately screens the exact Linux amd64 client dependency graph.
+The automated workflows verify the tested license files, notices, commit identity, source archives, and presence of vendored dependency source. The Go dependency audit separately screens the exact Linux amd64 client dependency graph after successful APK and IPK builds.
 
 These automated checks are not legal advice and do not replace a human review of each dependency's license, attribution, patent, trademark, or additional-term requirements. A passing workflow means the tested files and source bundle were present and internally matched; it is not a blanket legal certification.
 
@@ -36,7 +38,7 @@ These automated checks are not legal advice and do not replace a human review of
 
 The OpenWrt Linux amd64 client dependency graph is audited separately by
 `.github/workflows/go-license-audit.yml`. The workflow uses the exact
-upstream commit recorded in a successful IPK's `SOURCE-INFO.txt`, or accepts
+upstream commit recorded in a successful APK or IPK build artifact, or accepts
 an explicit upstream ref for a manual historical audit. It applies the same
 `./cmd/client` target, `linux/amd64` platform, `CGO_ENABLED=0`, and
 `with_utls,with_external_windivert` build tags as the package build.
