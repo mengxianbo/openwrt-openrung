@@ -464,9 +464,8 @@ jobs:
             - Older OpenWrt releases using opkg: download the IPK files or openrung-ipk.zip.
 
             Individual package files are attached alongside both convenience ZIP archives.
-            The IPK build's 30-day Actions artifact also contains the exact packaging and upstream source snapshots.
-            The separate corresponding-source workflow creates a vendor-inclusive source artifact retained for 90 days.
-            Source archives are Actions artifacts, not assets attached to this Release; match them by the exact commits in SOURCE-INFO.txt.
+            The corresponding-source workflow attaches a complete, vendor-inclusive source archive and SHA256 file for each successful IPK build to this Release.
+            The 90-day Actions source artifact is also retained as a secondary copy. Match the source archive by the exact commits in SOURCE-INFO.txt.
             OpenRung upstream commit: ${{ env.OPENRUNG_COMMIT }}
           files: |
             ./openrung-client_x86_64.ipk
