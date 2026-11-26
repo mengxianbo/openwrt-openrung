@@ -489,5 +489,6 @@ jobs:
             ./luci-app-openrung_all.ipk
             ./IPK-SHA256SUMS
             ./openrung-ipk.zip
+            ./COPYRIGHT.md
           fail_on_unmatched_files: true
           make_latest: true
