@@ -12,6 +12,8 @@
 
 > **许可证与版权：** 本仓库由项目维护者编写并拥有版权的代码采用 **GNU GPL-3.0-or-later**。允许免费使用、修改、分享，也允许合规收费分发；收费分发不免除 GPL 对应源码、版权声明、许可证文本和修改说明等要求。OpenRung 上游客户端及第三方组件仍按各自许可证执行。详见 [LICENSE](./LICENSE)、[COPYRIGHT.md](./COPYRIGHT.md) 和 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 
+> **安装包版权文件：** 客户端和 LuCI 包均会附带 GPL 许可证及项目版权说明；客户端包还附带经发行方信息填充的上游第三方声明。每次构建会检查必要文件是否进入最终 APK/IPK。Go 依赖许可证审计会针对 APK/IPK 构建所使用的精确上游提交运行；自动审计不替代对非 Go 资源、专利、商标和额外许可条款的人工复核。
+
 ## 当前实现
 
 - `openrung-client`：从官方 OpenRung 源码编译的 Linux amd64 CLI。
