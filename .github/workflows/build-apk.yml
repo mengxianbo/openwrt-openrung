@@ -86,8 +86,8 @@ jobs:
             mkdir -p "$(dirname "$dest")"
             install -m 0644 "$file" "$dest"
             count=$((count + 1))
-          done < <(find vendor -type f \\
-            \\( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \\) -print0)
+          done < <(find vendor -type f \
+            \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) -print0)
           test "$count" -gt 0
           echo "THIRD_PARTY_LICENSES_DIR=$LICENSE_DIR" >> "$GITHUB_ENV"
           echo "Collected $count vendored third-party license/notice files"
