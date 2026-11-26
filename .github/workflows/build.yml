@@ -445,6 +445,7 @@ jobs:
           openrung-ipk.zip
           OPENRUNG-UPSTREAM-LICENSE
           THIRD_PARTY_NOTICES.md
+          COPYRIGHT.md
           PACKAGING-LICENSE
           SOURCE-INFO.txt
           '
