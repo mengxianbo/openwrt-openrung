@@ -135,6 +135,74 @@ jobs:
           (cd dist && zip -j openrung-openwrt-25.12-x86_64-bundle.zip openrung-client_x86_64.apk luci-app-openrung_all.apk)
           ls -lh dist
 
+      - name: Assemble exact APK corresponding-source archive
+        env:
+          PACKAGING_COMMIT: ${{ github.sha }}
+          UPSTREAM_COMMIT: ${{ env.OPENRUNG_COMMIT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="source-bundle"
+          mkdir -p "${SRC}/packaging" "${SRC}/upstream" "${SRC}/notices"
+
+          git archive --format=tar.gz --prefix="openwrt-openrung-${PACKAGING_COMMIT}/" "${PACKAGING_COMMIT}" \
+            > "${SRC}/packaging/openwrt-openrung-source-${PACKAGING_COMMIT}.tar.gz"
+
+          git -C upstream archive --format=tar.gz --prefix="openrung-${UPSTREAM_COMMIT}/" "${UPSTREAM_COMMIT}" \
+            > "${SRC}/upstream/openrung-upstream-source-${UPSTREAM_COMMIT}.tar.gz"
+          (
+            cd upstream
+            go mod vendor
+            test -s vendor/modules.txt
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+              go list -mod=vendor -tags='with_utls,with_external_windivert' ./cmd/client >/dev/null
+          )
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
+            --numeric-owner -cf - -C upstream . | gzip -n \
+            > "${SRC}/upstream/openrung-upstream-corresponding-source-${UPSTREAM_COMMIT}-with-vendor.tar.gz"
+
+          cp LICENSE COPYRIGHT.md LICENSES.md THIRD_PARTY_NOTICES.md \
+            DISTRIBUTION-NOTICE-ADDENDUM.md "${SRC}/notices/"
+          cp upstream/LICENSE "${SRC}/notices/OPENRUNG-UPSTREAM-LICENSE.txt"
+          cp upstream/THIRD_PARTY_NOTICES.md "${SRC}/notices/OPENRUNG-THIRD-PARTY-NOTICES.md"
+
+          MODULE_COUNT="$(grep -c '^# ' upstream/vendor/modules.txt || true)"
+          LICENSE_COUNT="$(find upstream/vendor -type f \
+            \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) | wc -l)"
+          test "${MODULE_COUNT}" -gt 0
+          test "${LICENSE_COUNT}" -gt 0
+
+          cat > "${SRC}/SOURCE-MANIFEST.txt" <<EOF
+          OpenRung OpenWrt 25.12 APK corresponding source
+          Packaging repository: https://github.com/${GITHUB_REPOSITORY}
+          Exact packaging commit: ${PACKAGING_COMMIT}
+          Upstream repository: https://github.com/openrung/openrung
+          Exact upstream commit: ${UPSTREAM_COMMIT}
+          OpenWrt SDK: 25.12.6 x86/64
+          Client target: ./cmd/client
+          Build platform: linux/amd64
+          CGO_ENABLED: 0
+          Build tags: with_utls,with_external_windivert
+          Go toolchain: $(go version)
+          Vendored Go module entries: ${MODULE_COUNT}
+          Vendor license/notice files found: ${LICENSE_COUNT}
+          This archive contains exact packaging source, exact upstream source,
+          the vendor-inclusive upstream source tree, build metadata and license notices.
+          EOF
+
+          (
+            cd "${SRC}"
+            find . -type f -printf '%P\n' | sort | xargs -r sha256sum > SHA256SUMS-SOURCE
+            sha256sum SHA256SUMS-SOURCE > SHA256SUMS-SOURCE.sha256
+          )
+
+          BUNDLE="openrung-corresponding-source-apk-${UPSTREAM_COMMIT}.tar.gz"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
+            --numeric-owner -czf "dist/${BUNDLE}" -C "${SRC}" .
+          (cd dist && sha256sum "${BUNDLE}" > "${BUNDLE}.sha256" && sha256sum -c "${BUNDLE}.sha256")
+          tar -tzf "dist/${BUNDLE}" >/dev/null
+          echo "PASS: APK corresponding source archive created and verified: ${BUNDLE}"
+
       - name: Upload APK build artifacts
         uses: actions/upload-artifact@v4
         with:
