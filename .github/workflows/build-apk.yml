@@ -12,6 +12,9 @@ on:
       - "package/openrung-client/**"
       - "package/luci-app-openrung/**"
       - "DISTRIBUTION-NOTICE-ADDENDUM.md"
+      - "COPYRIGHT.md"
+      - "LICENSE"
+      - "THIRD_PARTY_NOTICES.md"
       - ".github/workflows/build-apk.yml"
 
 permissions:
@@ -163,6 +166,53 @@ jobs:
           (cd dist && zip -j openrung-openwrt-25.12-x86_64-bundle.zip openrung-client_x86_64.apk luci-app-openrung_all.apk)
           ls -lh dist
 
+      - name: Verify APK license and copyright payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import io
+          import tarfile
+          from pathlib import Path
+
+          checks = {
+              "openrung-client_x86_64.apk": [
+                  "usr/share/openrung/LICENSE",
+                  "usr/share/openrung/COPYRIGHT.md",
+                  "usr/share/openrung/THIRD_PARTY_NOTICES.md",
+              ],
+              "luci-app-openrung_all.apk": [
+                  "usr/share/licenses/luci-app-openrung/LICENSE",
+                  "usr/share/licenses/luci-app-openrung/COPYRIGHT.md",
+              ],
+          }
+
+          for filename, required in checks.items():
+              path = Path("dist") / filename
+              with tarfile.open(path, "r:*") as outer:
+                  data_member = next(
+                      (m for m in outer.getmembers()
+                       if m.isfile() and m.name.endswith("data.tar.gz")),
+                      None,
+                  )
+                  if data_member is None:
+                      raise SystemExit(f"FAIL: {filename}: APK data archive missing")
+                  data_blob = outer.extractfile(data_member).read()
+              with tarfile.open(fileobj=io.BytesIO(data_blob), mode="r:gz") as data:
+                  files = {
+                      m.name.removeprefix("./"): data.extractfile(m).read()
+                      for m in data.getmembers() if m.isfile()
+                  }
+              for name in required:
+                  if name not in files or not files[name].strip():
+                      raise SystemExit(f"FAIL: {filename}: {name} missing or empty")
+              if filename.startswith("openrung-client"):
+                  notices = files["usr/share/openrung/THIRD_PARTY_NOTICES.md"].decode("utf-8", "replace")
+                  if "<add " in notices:
+                      raise SystemExit("FAIL: APK third-party notice contains unresolved placeholders")
+              print(f"PASS: {filename}: license, copyright and required notices verified")
+          PY
+
       - name: Assemble exact APK corresponding-source archive
         env:
           PACKAGING_COMMIT: ${{ github.sha }}
@@ -256,6 +306,7 @@ jobs:
           openrung-ipk.zip
           OPENRUNG-UPSTREAM-LICENSE
           THIRD_PARTY_NOTICES.md
+          COPYRIGHT.md
           PACKAGING-LICENSE
           SOURCE-INFO.txt
           '
