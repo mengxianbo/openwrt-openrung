@@ -61,6 +61,28 @@ jobs:
           echo "OPENRUNG_COMMIT=$COMMIT" >> "$GITHUB_ENV"
           echo "OpenRung commit: $COMMIT"
 
+      - name: Collect vendored third-party license texts
+        working-directory: upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          go mod vendor
+          test -s vendor/modules.txt
+          LICENSE_DIR="$RUNNER_TEMP/openrung-third-party-licenses"
+          mkdir -p "$LICENSE_DIR"
+          count=0
+          while IFS= read -r -d '' file; do
+            rel="${file#vendor/}"
+            dest="$LICENSE_DIR/$rel"
+            mkdir -p "$(dirname "$dest")"
+            install -m 0644 "$file" "$dest"
+            count=$((count + 1))
+          done < <(find vendor -type f \
+            \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) -print0)
+          test "$count" -gt 0
+          echo "THIRD_PARTY_LICENSES_DIR=$LICENSE_DIR" >> "$GITHUB_ENV"
+          echo "Collected $count vendored third-party license/notice files"
+
       - name: Build Linux amd64 client
         working-directory: upstream
         env:
@@ -119,6 +141,9 @@ jobs:
             work/client/CONTROL/postinst
 
           mkdir -p work/client/usr/share/openrung
+          mkdir -p work/client/usr/share/openrung/licenses/third-party
+          cp -a "$THIRD_PARTY_LICENSES_DIR/." \
+            work/client/usr/share/openrung/licenses/third-party/
 
           cp upstream/LICENSE \
             work/client/usr/share/openrung/LICENSE
@@ -417,6 +442,14 @@ jobs:
           notices = client_data.get("usr/share/openrung/THIRD_PARTY_NOTICES.md", b"")
           if not notices.strip():
               raise SystemExit("FAIL: openrung-client: third-party notices missing or empty")
+          third_party_licenses = [
+              name for name in client_data
+              if name.startswith("usr/share/openrung/licenses/third-party/")
+              and client_data[name].strip()
+          ]
+          if not third_party_licenses:
+              raise SystemExit("FAIL: openrung-client: bundled third-party license texts missing")
+          print(f"PASS: openrung-client: {len(third_party_licenses)} bundled third-party license/notice files")
           notice_text = notices.decode("utf-8", "replace")
           if "<add " in notice_text:
               raise SystemExit("FAIL: openrung-client: unresolved third-party notice placeholder")
