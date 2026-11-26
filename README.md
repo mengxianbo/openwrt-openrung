@@ -10,7 +10,7 @@
 >
 > **格式选择：** OpenWrt 25.12（APK 包管理器）请选择 APK；仍使用 opkg 的旧版 OpenWrt 请选择 IPK。两个格式不能混装。以下命令均使用 Release 中的稳定文件名，无需手动修改版本号。
 
-> **许可证：** 本项目自编写的代码采用 **GNU GPL-3.0-or-later** 发布。项目集成的 OpenRung 客户端及其第三方组件仍须遵守各自上游许可证与版权声明；请同时查看 [LICENSE](./LICENSE) 和 [OpenRung 上游许可证](https://github.com/openrung/openrung/blob/main/LICENSE)。
+> **许可证与版权：** 本仓库由项目维护者编写并拥有版权的代码采用 **GNU GPL-3.0-or-later**。允许免费使用、修改、分享，也允许合规收费分发；收费分发不免除 GPL 对应源码、版权声明、许可证文本和修改说明等要求。OpenRung 上游客户端及第三方组件仍按各自许可证执行。详见 [LICENSE](./LICENSE)、[COPYRIGHT.md](./COPYRIGHT.md) 和 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 
 ## 当前实现
 
@@ -94,15 +94,23 @@ logread -e openrung | tail -50
 
 也可以下载 [IPK 合集 ZIP](https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/openrung-ipk.zip)，其中包含上述两个稳定命名的 IPK 文件（不是带版本号的文件名）。
 
-## 许可证与源码对应关系
+## 许可证、版权与商业分发
 
-- 本仓库维护的 OpenWrt 打包脚本及 LuCI 管理代码采用 GPL-3.0-or-later。
-- IPK 中的客户端来自 OpenRung 上游仓库；构建时会将上游 `LICENSE` 和 `THIRD_PARTY_NOTICES.md` 原样安装到 `/usr/share/openrung/`，保留第三方版权、许可证文本和适用的附加条款。
-- 每次构建会记录打包仓库与 OpenRung 上游的精确 Git commit，并在 IPK 内提供 `SOURCE-INFO.txt`。
-- 每次 IPK 构建的 Actions artifact `openrung-openwrt-ipk` 会包含该次构建对应的本仓库打包源码和 OpenRung 上游源码快照；该 artifact 保留 30 天，不是 Release 附件。另一个后置工作流会生成包含 vendored Go 依赖的对应源码 artifact，保留 90 天。请从对应 IPK 构建记录及其关联的源码工作流下载，务必核对 `SOURCE-INFO.txt` 中的精确 commit，不要用最新版源码替代旧版 IPK。
-- 客户端上游及其依赖的完整许可范围，以随包提供的 `THIRD_PARTY_NOTICES.md` 和各组件原始许可为准。
+- 本仓库中由项目维护者原创并有权授权的代码，采用 **GNU General Public License v3.0 or later（GPL-3.0-or-later）**。完整许可证文本见 [LICENSE](./LICENSE)。
+- 允许任何人免费使用、复制、修改、分享和再分发；也允许收费出售软件副本、固件、安装服务、技术支持或保修服务。不得以收费为由取消接收者在 GPL 下的权利，也不得向下游收取其行使 GPL 权利的额外许可费。
+- 分发原版或修改版时，必须遵守 GPL：保留适用的版权、许可证及无担保声明；向接收者提供 GPL 文本；修改版须显著说明修改内容和日期；分发目标代码时须按 GPL 提供与该二进制相对应的完整源代码及必要构建/安装脚本。
+- 不得将本项目 GPL 覆盖的衍生作品以更严格的闭源条款再分发，不得删除或篡改原有版权/许可证声明，也不得虚假声称本项目或其上游代码由再分发者原创。
+- GPL 不自动授予使用项目名称、标识、徽标或作者身份进行背书/宣传的商标或宣传权利。未经许可，不得暗示某个分支、收费版本或服务是作者官方发布或获得作者认可。
+- 上述 GPL 授权只覆盖本项目维护者有权授权的原创部分。OpenRung 客户端及第三方依赖按其各自许可证和版权声明执行；不得把它们误标为本项目作者所有。具体边界见 [COPYRIGHT.md](./COPYRIGHT.md) 与 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 
-**注意：** 本项目提供源码定位与版权声明，不代表对所有第三方依赖重新授权。分发 IPK 时请同时保留包内的许可证和第三方声明文件。
+### 二进制包与对应源码
+
+- IPK 中的客户端来自 OpenRung 上游仓库；构建时会将上游 `LICENSE` 和 `THIRD_PARTY_NOTICES.md` 安装到 `/usr/share/openrung/`，保留第三方版权、许可证文本和适用的附加条款。
+- 每次构建会记录打包仓库与 OpenRung 上游的精确 Git commit，并在包内提供 `SOURCE-INFO.txt`。
+- 当前工作流的 Actions 源码 artifact 分别保留 30 天和 90 天，**短期 artifact 不应作为长期唯一源码提供方式**。发布二进制时，应同时在同一 Release 提供该二进制对应的完整源码归档（包括准确的打包源码、上游源码快照、必要 vendored 依赖、补丁和构建/安装脚本），并在二进制下载页直接链接到该归档；归档应在二进制仍被提供期间持续可获取。
+- 用户或再分发者应核对包内 `SOURCE-INFO.txt` 的精确 commit。不能用最新版源码或不匹配的构建快照代替对应源码。
+
+**注意：** 本仓库的版权声明不代表对所有第三方依赖重新授权。分发 APK/IPK 时，请保留包内许可证和第三方声明文件，并确保每个组件的许可证义务均已满足。
 
 ## 源码归档与历史版本说明
 
