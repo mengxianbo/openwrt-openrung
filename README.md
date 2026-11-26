@@ -14,6 +14,10 @@
 
 > **安装包版权文件：** 客户端和 LuCI 包均会附带 GPL 许可证及项目版权说明；客户端包还附带经发行方信息填充的上游第三方声明。每次构建会检查必要文件是否进入最终 APK/IPK。Go 依赖许可证审计会针对 APK/IPK 构建所使用的精确上游提交运行；自动审计不替代对非 Go 资源、专利、商标和额外许可条款的人工复核。
 
+## 许可证专项审计
+
+许可证审计针对每次 APK/IPK 构建所使用的精确 OpenRung 上游提交运行。自动检查阻断禁止及未知许可证；GPL 等 copyleft/Restricted 分类不会被一概视为不兼容，而是需要结合具体许可证、上游声明和对应源码人工复核。客户端和 LuCI 安装包会携带项目版权说明及适用的许可证/第三方声明。审计范围和限制见 [DEPENDENCY-LICENSE-AUDIT.md](./DEPENDENCY-LICENSE-AUDIT.md) 与 [LICENSES.md](./LICENSES.md)。
+
 ## 当前实现
 
 - `openrung-client`：从官方 OpenRung 源码编译的 Linux amd64 CLI。
