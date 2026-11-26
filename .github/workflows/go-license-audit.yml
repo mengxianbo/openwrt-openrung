@@ -11,12 +11,19 @@ on:
         default: "5cba4f0b9da642dcc9cc1904f861eb1d59c23a04"
 
   workflow_run:
-    workflows: ["Build OpenRung OpenWrt IPK"]
+    workflows:
+      - "Build OpenRung OpenWrt IPK"
+      - "Build OpenRung OpenWrt 25.12 APK"
     types: [completed]
 
   pull_request:
     paths:
       - ".github/workflows/go-license-audit.yml"
+      - ".github/workflows/build.yml"
+      - ".github/workflows/build-apk.yml"
+      - "package/**"
+      - "COPYRIGHT.md"
+      - "THIRD_PARTY_NOTICES.md"
       - "LICENSE-AUDIT/**"
 
 permissions:
@@ -32,12 +39,22 @@ jobs:
       - name: Checkout packaging repository
         uses: actions/checkout@v4
 
-      - name: Download successful build artifact
-        if: github.event_name == 'workflow_run'
+      - name: Download successful IPK build artifact
+        if: github.event_name == 'workflow_run' && github.event.workflow.name == 'Build OpenRung OpenWrt IPK'
         uses: actions/download-artifact@v4
         with:
           name: openrung-openwrt-ipk
           path: artifacts/ipk
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Download successful APK build artifact
+        if: github.event_name == 'workflow_run' && github.event.workflow.name == 'Build OpenRung OpenWrt 25.12 APK'
+        uses: actions/download-artifact@v4
+        with:
+          name: openrung-openwrt-25.12-x86_64-apk
+          path: artifacts/apk
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
           run-id: ${{ github.event.workflow_run.id }}
@@ -57,33 +74,34 @@ jobs:
           import tarfile
 
           found = set()
+          event_workflow = "${{ github.event.workflow.name }}"
 
-          for ipk in pathlib.Path("artifacts/ipk").rglob("*.ipk"):
-              with tarfile.open(ipk, "r:gz") as outer:
-                  blob = outer.extractfile("./data.tar.gz")
-                  if blob is None:
-                      continue
-
-                  with tarfile.open(
-                      fileobj=io.BytesIO(blob.read()),
-                      mode="r:gz"
-                  ) as data:
-                      for member in data.getmembers():
-                          if member.isfile() and member.name.endswith("/SOURCE-INFO.txt"):
-                              raw = data.extractfile(member).read().decode(
-                                  "utf-8", "replace"
-                              )
-                              match = re.search(
-                                  r"Exact upstream source commit:\s*([0-9a-f]{40})",
-                                  raw
-                              )
-                              if match:
-                                  found.add(match.group(1))
+          if event_workflow == "Build OpenRung OpenWrt IPK":
+              for ipk in pathlib.Path("artifacts/ipk").rglob("*.ipk"):
+                  with tarfile.open(ipk, "r:gz") as outer:
+                      blob = outer.extractfile("./data.tar.gz")
+                      if blob is None:
+                          continue
+                      with tarfile.open(fileobj=io.BytesIO(blob.read()), mode="r:gz") as data:
+                          for member in data.getmembers():
+                              if member.isfile() and member.name.endswith("/SOURCE-INFO.txt"):
+                                  raw = data.extractfile(member).read().decode("utf-8", "replace")
+                                  match = re.search(r"Exact upstream source commit:\\s*([0-9a-f]{40})", raw)
+                                  if match:
+                                      found.add(match.group(1))
+          elif event_workflow == "Build OpenRung OpenWrt 25.12 APK":
+              info = pathlib.Path("artifacts/apk/SOURCE-INFO.txt")
+              if not info.is_file():
+                  raise SystemExit("APK artifact is missing SOURCE-INFO.txt")
+              raw = info.read_text(encoding="utf-8")
+              match = re.search(r"OpenRung upstream commit:\\s*([0-9a-f]{40})", raw)
+              if match:
+                  found.add(match.group(1))
+          else:
+              raise SystemExit(f"Unsupported workflow: {event_workflow}")
 
           if len(found) != 1:
-              raise SystemExit(
-                  f"Expected exactly one upstream commit; found: {sorted(found)}"
-              )
+              raise SystemExit(f"Expected exactly one upstream commit; found: {sorted(found)}")
 
           print("UPSTREAM_COMMIT=" + next(iter(found)))
           PY
@@ -201,7 +219,7 @@ jobs:
 
           go-licenses check \
             "${IGNORE_ARGS[@]}" \
-            --disallowed_types=forbidden,unknown \
+            --disallowed_types=forbidden,restricted,unknown \
             ./cmd/client
 
           echo "===== Save remaining license files ====="
