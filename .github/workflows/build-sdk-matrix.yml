@@ -166,33 +166,26 @@ jobs:
       - name: Verify APK archives and metadata
         run: |
           set -eux
-          mkdir -p "$RUNNER_TEMP/apk-verify"
+          APK="$SDK_DIR/staging_dir/host/bin/apk"
+          test -x "$APK"
           CLIENT_APK="$(find dist -maxdepth 1 -name 'openrung-client-*.apk' -print -quit)"
           LUCI_APK="$(find dist -maxdepth 1 -name 'luci-app-openrung-*.apk' -print -quit)"
-          test -n "$CLIENT_APK"
-          test -n "$LUCI_APK"
+          test -s "$CLIENT_APK"
+          test -s "$LUCI_APK"
 
-          # OpenWrt APK packages are tar-based archives. Do not invoke apk info:
-          # that command expects an installed package database on the host.
-          tar -tzf "$CLIENT_APK" > "$RUNNER_TEMP/client-files.txt"
-          tar -tzf "$LUCI_APK" > "$RUNNER_TEMP/luci-files.txt"
-          grep -Eq '(^|/)usr/libexec/openrung-client\.bin$' "$RUNNER_TEMP/client-files.txt"
-          grep -Eq '(^|/)usr/share/licenses/luci-app-openrung/LICENSE$' "$RUNNER_TEMP/luci-files.txt"
+          # Validate using the exact apk-tools binary shipped with this OpenWrt SDK.
+          # OpenWrt APK files are not gzip-compressed tarballs; do not inspect them with tar -z.
+          ROOT="$RUNNER_TEMP/apk-root"
+          mkdir -p "$ROOT"
+          "$APK" add --root "$ROOT" --initdb --allow-untrusted --no-scripts \
+            --no-network --no-deps "$CLIENT_APK" "$LUCI_APK"
 
-          mkdir -p "$RUNNER_TEMP/apk-verify/client" "$RUNNER_TEMP/apk-verify/luci"
-          tar -xzf "$CLIENT_APK" -C "$RUNNER_TEMP/apk-verify/client"
-          tar -xzf "$LUCI_APK" -C "$RUNNER_TEMP/apk-verify/luci"
-          test -s "$RUNNER_TEMP/apk-verify/client/usr/libexec/openrung-client.bin"
-          test -s "$RUNNER_TEMP/apk-verify/luci/usr/share/licenses/luci-app-openrung/LICENSE"
-
-          # Confirm package metadata exists and identifies the expected packages.
-          tar -xOzf "$CLIENT_APK" .PKGINFO | tee "$RUNNER_TEMP/client.PKGINFO"
-          tar -xOzf "$LUCI_APK" .PKGINFO | tee "$RUNNER_TEMP/luci.PKGINFO"
-          grep -q '^name = openrung-client$' "$RUNNER_TEMP/client.PKGINFO"
-          grep -q '^name = luci-app-openrung$' "$RUNNER_TEMP/luci.PKGINFO"
-          grep -q '^arch = ' "$RUNNER_TEMP/client.PKGINFO"
-          grep -q '^arch = ' "$RUNNER_TEMP/luci.PKGINFO"
-          echo "Both APK archives, package metadata, and required payload files verified."
+          test -s "$ROOT/usr/libexec/openrung-client.bin"
+          test -s "$ROOT/usr/share/licenses/luci-app-openrung/LICENSE"
+          "$APK" --root "$ROOT" info | tee "$RUNNER_TEMP/installed-packages.txt"
+          grep -q '^openrung-client-' "$RUNNER_TEMP/installed-packages.txt"
+          grep -q '^luci-app-openrung-' "$RUNNER_TEMP/installed-packages.txt"
+          echo "Both OpenWrt APKs installed into an isolated test root and payloads verified."
 
       - uses: actions/upload-artifact@v4
         with:
