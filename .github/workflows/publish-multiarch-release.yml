@@ -1,0 +1,189 @@
+name: 发布多架构 OpenWrt 统一正式版（独立 Release）
+
+on:
+  workflow_dispatch:
+    inputs:
+      apk_matrix_run_id:
+        description: 成功的 OpenWrt 25.12 APK 矩阵运行 ID
+        required: true
+        type: string
+      ipk_matrix_run_id:
+        description: 成功的 OpenWrt 24.10 IPK 矩阵运行 ID
+        required: true
+        type: string
+      publish_confirm:
+        description: 输入 PUBLISH-MULTIARCH 才允许创建独立正式 Release
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: openrung-multiarch-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ inputs.publish_confirm == 'PUBLISH-MULTIARCH' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact packaging revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Validate successful matrix runs and matching source revision
+        id: runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_RUN_ID: ${{ inputs.apk_matrix_run_id }}
+          IPK_RUN_ID: ${{ inputs.ipk_matrix_run_id }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$APK_RUN_ID" =~ ^[0-9]+$ ]] || { echo "Invalid APK run ID" >&2; exit 1; }
+          [[ "$IPK_RUN_ID" =~ ^[0-9]+$ ]] || { echo "Invalid IPK run ID" >&2; exit 1; }
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APK_RUN_ID" > apk-run.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$IPK_RUN_ID" > ipk-run.json
+          jq -e --arg sha "$EXPECTED_SHA" \
+            '.conclusion == "success" and .head_sha == $sha and (.path | endswith("build-sdk-matrix.yml"))' \
+            apk-run.json >/dev/null
+          jq -e --arg sha "$EXPECTED_SHA" \
+            '.conclusion == "success" and .head_sha == $sha and (.path | endswith("build-ipk-matrix.yml"))' \
+            ipk-run.json >/dev/null
+          echo "apk_run_id=$APK_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "ipk_run_id=$IPK_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "Both successful matrix runs match packaging commit $EXPECTED_SHA."
+
+      - name: Download APK matrix artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.runs.outputs.apk_run_id }}
+        run: |
+          set -eux
+          mkdir -p artifacts/apk-matrix
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'openrung-openwrt-25.12-*' --dir artifacts/apk-matrix
+          test "$(find artifacts/apk-matrix -type f -name '*.apk' | wc -l)" -eq 20
+
+      - name: Download IPK matrix artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.runs.outputs.ipk_run_id }}
+        run: |
+          set -eux
+          mkdir -p artifacts/ipk-matrix
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'openrung-openwrt-24.10-*' --dir artifacts/ipk-matrix
+          test "$(find artifacts/ipk-matrix -type f -name '*.ipk' | wc -l)" -eq 20
+
+      - name: Collect existing x86_64 stable packages without changing the old Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eux
+          mkdir -p artifacts/x86
+          gh release download openwrt-packages --repo "$GITHUB_REPOSITORY" \
+            --pattern 'openrung-client_x86_64.apk' \
+            --pattern 'luci-app-openrung_all.apk' \
+            --pattern 'openrung-client_x86_64.ipk' \
+            --pattern 'luci-app-openrung_all.ipk' \
+            --dir artifacts/x86
+          test "$(find artifacts/x86 -maxdepth 1 -type f | wc -l)" -eq 4
+
+      - name: Assemble and verify independent multi-architecture Release
+        env:
+          APK_RUN_ID: ${{ steps.runs.outputs.apk_run_id }}
+          IPK_RUN_ID: ${{ steps.runs.outputs.ipk_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/build-info
+          find artifacts/apk-matrix -type f -name '*.apk' -exec cp -v {} dist/ \;
+          find artifacts/ipk-matrix -type f -name '*.ipk' -exec cp -v {} dist/ \;
+          cp artifacts/x86/*.apk artifacts/x86/*.ipk dist/
+
+          find artifacts/apk-matrix artifacts/ipk-matrix -type f -name BUILD-INFO.txt -print0 |
+          while IFS= read -r -d '' info; do
+            parent="$(basename "$(dirname "$info")")"
+            install -m 0644 "$info" "dist/build-info/$parent.txt"
+          done
+
+          APK_COUNT="$(find dist -maxdepth 1 -type f -name '*.apk' | wc -l)"
+          IPK_COUNT="$(find dist -maxdepth 1 -type f -name '*.ipk' | wc -l)"
+          test "$APK_COUNT" -eq 22
+          test "$IPK_COUNT" -eq 22
+
+          for target in \
+            arm64-armsr-armv8 armv7-armsr-armv7 mipsel-ramips-mt7621 \
+            mips-malta-be mips-ath79-generic mipsel-malta-le \
+            mips64el-malta-le64 mips64-octeon riscv64-sifiveu riscv64-starfive
+          do
+            test -s "dist/openrung-client-$target.apk"
+            test -s "dist/luci-app-openrung-$target.apk"
+            test -s "dist/openrung-client-$target.ipk"
+            test -s "dist/luci-app-openrung-$target.ipk"
+          done
+
+          (
+            cd dist
+            sha256sum *.apk > APK-SHA256SUMS
+            sha256sum *.ipk > IPK-SHA256SUMS
+            for file in *.apk *.ipk; do sha256sum "$file" > "$file.sha256"; done
+            zip -j openrung-openwrt-25.12-multiarch-apk-bundle.zip *.apk
+            zip -j openrung-openwrt-24.10-multiarch-ipk-bundle.zip *.ipk
+            sha256sum -c APK-SHA256SUMS
+            sha256sum -c IPK-SHA256SUMS
+          )
+
+          cp LICENSE COPYRIGHT.md THIRD_PARTY_NOTICES.md DISTRIBUTION-NOTICE-ADDENDUM.md dist/
+          cat > dist/BUILD-MANIFEST.txt <<EOF
+          OpenRung multi-architecture OpenWrt package release
+          Packaging repository: https://github.com/${GITHUB_REPOSITORY}
+          Packaging commit: ${GITHUB_SHA}
+          OpenWrt 25.12 APK matrix run: ${APK_RUN_ID}
+          OpenWrt 24.10.8 IPK matrix run: ${IPK_RUN_ID}
+          APK package count: ${APK_COUNT}
+          IPK package count: ${IPK_COUNT}
+          x86_64 packages are carried forward from the existing openwrt-packages Release.
+          ARM, MIPS and RISC-V packages are SDK-built artifacts from the two validated matrix runs.
+          Target hardware runtime verification is still recommended before deployment.
+          EOF
+          (
+            cd dist
+            find . -maxdepth 1 -type f ! -name 'SHA256SUMS-RELEASE*' -printf '%f\n' | sort | xargs -r sha256sum > SHA256SUMS-RELEASE
+          )
+          ls -lh dist
+
+      - name: Publish a new independent formal Release (old Release is untouched)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: openwrt-packages-multiarch
+          target_commitish: ${{ github.sha }}
+          name: "OpenRung OpenWrt 多架构软件包（APK + IPK）"
+          body: |
+            # OpenRung OpenWrt 多架构软件包
+
+            本 Release 与原有 openwrt-packages 正式版分开，不会覆盖或删除旧版资产。
+
+            ## 下载选择
+
+            - OpenWrt 25.12（APK）：选择与 DISTRIB_TARGET 对应的 APK。
+            - OpenWrt 24.10（opkg/IPK）：选择与 DISTRIB_TARGET 对应的 IPK。
+            - x86_64：保留原有稳定包名。
+            - ZIP 合集：分别提供 25.12 APK 与 24.10 IPK 多架构合集。
+            - 每个安装包均提供独立 .sha256 校验文件。
+
+            ## 兼容性说明
+
+            ARM64、ARMv7、MIPS 大小端/32/64 位及 RISC-V 安装包由对应 OpenWrt 官方 SDK 构建，并通过包归档、包内容和 ELF class/endianness 检查。真实路由器上的安装、procd 启动及代理连接仍需结合具体设备验证；不同 ABI 不得混装。
+
+            ## 安装
+
+            仓库提供按 OpenWrt 版本、DISTRIB_TARGET 和包管理器精确选择安装包的 install.sh。未知目标会安全停止，不会回退到近似架构。
+          files: dist/*
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
+          make_latest: false
