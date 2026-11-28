@@ -121,10 +121,10 @@ jobs:
           archive = Path("/tmp") / sdk
           urlretrieve(base + sdk, archive)
           digest = hashlib.sha256()
-with archive.open("rb") as stream:
-    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-        digest.update(chunk)
-actual = digest.hexdigest()
+          with archive.open("rb") as stream:
+              for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                  digest.update(chunk)
+          actual = digest.hexdigest()
           if actual != expected:
               raise SystemExit(f"SDK SHA256 mismatch: expected {expected}, got {actual}")
           print(f"Verified official SDK: {sdk} ({actual})")
