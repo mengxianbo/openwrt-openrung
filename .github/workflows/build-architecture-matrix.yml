@@ -7,6 +7,10 @@ on:
         description: Official OpenRung source ref (tag, branch, or commit)
         required: true
         default: main
+  push:
+    paths:
+      - '.github/workflows/build-architecture-matrix.yml'
+      - 'package/openrung-client/**'
   pull_request:
     paths:
       - '.github/workflows/build-architecture-matrix.yml'
