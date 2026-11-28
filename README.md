@@ -1,10 +1,10 @@
 # OpenRung for OpenWrt（多架构构建中）
 
 ![Open Source](https://img.shields.io/badge/Open%20Source-Public%20Repository-blue?logo=github)
-![Platform](https://img.shields.io/badge/Platform-OpenWrt%20x86__64-blue)
+![Platform](https://img.shields.io/badge/Platform-OpenWrt%20Multi--Arch-blue)
 ![Build](https://img.shields.io/badge/Build-GitHub%20Actions-success)
 
-面向 KWRT/OpenWrt x86_64 的 OpenRung CLI + LuCI 管理包。
+面向 OpenWrt 路由器的 OpenRung CLI + LuCI 管理包，按固件目标和 ABI 构建对应安装包。
 
 > **统一下载入口：** [OpenRung APK + IPK 最新 Release](https://github.com/mengxianbo/openwrt-openrung/releases/tag/openwrt-packages)。该 Release 同时提供 OpenWrt 25.12 使用的 APK、旧版 opkg 系统使用的 IPK、对应 ZIP 合集及校验文件。请优先使用此入口，不要从历史 Release 下载旧包。
 >
@@ -23,11 +23,12 @@
 仓库维护两类多架构工作流：
 
 - [Linux 多架构核心编译](./.github/workflows/build-architecture-matrix.yml)：尝试构建 amd64、arm64、armv7、mips、mipsel、mips64、mips64el、riscv64 核心二进制。
-- [OpenWrt 25.12 SDK 安装包矩阵](./.github/workflows/build-sdk-matrix.yml)：使用 OpenWrt 官方 SDK，为 armsr/armv8、armsr/armv7、ramips/mt7621、ath79/generic、malta/be、malta/le、malta/le64、octeon/generic、sifiveu/generic、starfive/generic 构建原生 APK，并检查包内容及核心 ELF 文件头。
+- [OpenWrt 25.12 SDK APK 矩阵](./.github/workflows/build-sdk-matrix.yml)：使用官方 SDK，为 armsr/armv8、armsr/armv7、ramips/mt7621、ath79/generic、malta/be、malta/le、malta/le64、octeon/generic、sifiveu/generic、starfive/generic 构建原生 APK，并检查包内容及核心 ELF 文件头。
+- [OpenWrt 24.10.8 SDK IPK 矩阵](./.github/workflows/build-ipk-matrix.yml)：为上述目标构建原生 IPK，下载 SDK 时校验官方 SHA256，并检查 IPK 归档、客户端/ LuCI 文件、ELF 位数和大小端。
 
 SDK 工作流会从 OpenWrt 官方目标目录动态发现 SDK，并依据该目录的官方 sha256sums 校验下载文件。构建产物先保存为 GitHub Actions artifacts，**不会自动覆盖现有正式 Release，也不会让安装器提前下载未经验证的架构包**。
 
-**当前正式 Release 和一键安装器仍只支持 x86_64。** 上述新增目标属于构建验证阶段；只有对应 Actions 成功、安装包元数据和 ELF ABI 检查通过，并完成目标设备/模拟环境的安装、procd 启动、LuCI 和代理监听测试后，才会加入正式 Release 和自动安装映射。不同 MIPS 大小端、32/64 位及浮点 ABI 不得混用。
+**现有 openwrt-packages 正式 Release 仍保留原有 x86_64 稳定包。** 新增架构先进入 Actions 构建验证；24.10 IPK 矩阵通过后，将由单独的发布工作流创建新标签 `openwrt-packages-multiarch`，不会覆盖或删除旧 Release。发布工作流要求两组矩阵均成功、运行提交一致、22 个 APK 与 22 个 IPK 文件齐全并完成 SHA256 校验。真实路由器上的安装、procd 启动、LuCI 和代理监听仍需按设备验收；未发布目标会由安装器安全停止。不同 MIPS 大小端、32/64 位及浮点 ABI 不得混用。
 
 ## 当前实现
 
@@ -49,13 +50,13 @@ wget -O /tmp/openrung-install.sh https://raw.githubusercontent.com/mengxianbo/op
 sh /tmp/openrung-install.sh
 ```
 
-安装器会自动识别包管理器：检测到 `apk` 时选择 APK，检测到 `opkg` 时选择 IPK；下载后验证 SHA256，再安装、启用服务并检查默认代理端口 `44025`。
+安装器会读取 `DISTRIB_RELEASE`、`DISTRIB_TARGET`、`DISTRIB_ARCH` 并核对 `apk`/`opkg`，只选择已发布的精确目标包；下载后验证 SHA256，再安装、启用服务并检查默认代理端口 `44025`。未知目标、版本或包管理器组合会安全停止，不会仅凭 `uname -m` 猜测兼容性。多架构 Release 发布前，x86_64 会暂时回退到原正式版，其他目标不会误装旧包。
 
-**当前正式安装包支持范围：仍为 x86_64 核心包。** ARM、MIPS 和 RISC-V 的 SDK 构建正在验证，尚未进入正式 Release；安装器会对未发布的架构安全停止，不会下载或安装错误架构的软件包。
+**当前已发布安装包范围：旧正式版仍只有 x86_64。** ARM、MIPS 和 RISC-V 的 APK/IPK 需要等两组 SDK 矩阵通过后，才会进入独立的新 Release；在新 Release 发布前，安装器对这些目标安全停止，不会下载或安装错误架构的软件包。
 
 脚本和说明同步维护：修改安装脚本时应同时更新本节；若架构安装包尚未进入统一 Release，不得在说明中标记为已支持。
 
-**当前正式二进制支持边界（请注意）：** 目前统一 Release 中的 OpenRung 核心二进制仍仅为 `x86_64`。安装器现阶段支持 x86_64 设备上的 APK 或 IPK 包管理器自动选择；其他架构在 SDK 构建、ABI 检查和运行验收全部完成前，均不标记为正式支持。ImmortalWrt、iStoreOS、Lean、KWR​​T 等衍生固件只有在其架构、包管理器、依赖和 ABI 与现有包兼容时才可能安装；需要逐版本构建和实机验证，不能仅凭发行版名称保证兼容。
+**当前正式二进制支持边界（请注意）：** 现有 `openwrt-packages` Release 中的 OpenRung 核心二进制仍仅为 `x86_64`。多架构矩阵正在单独构建；安装器只有在 `openwrt-packages-multiarch` 发布后才会对相应目标启用新包。ImmortalWrt、iStoreOS、Lean、KWR​​T 等衍生固件只有在其架构、包管理器、依赖和 ABI 与现有包兼容时才可能安装；需要逐版本构建和实机验证，不能仅凭发行版名称保证兼容。
 
 安装成功后会启用 OpenRung 服务并检查默认本地代理端口 `44025`。若软件包安装成功但端口未监听，安装器会返回非零状态并提示查看 `logread -e openrung | tail -50`；这不等于节点连接已成功。
 
