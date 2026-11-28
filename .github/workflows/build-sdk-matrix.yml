@@ -93,7 +93,7 @@ jobs:
           from html.parser import HTMLParser
           from pathlib import Path
           from urllib.request import urlopen, urlretrieve
-          import hashlib, re
+          import hashlib, re, subprocess, os
 
           target = __import__("os").environ["TARGET"]
           release = __import__("os").environ["RELEASE"]
@@ -114,21 +114,24 @@ jobs:
               raise SystemExit(f"Expected exactly one official SDK for {target}; found {parser.links}")
           sdk = parser.links[0]
           sums = urlopen(base + "sha256sums").read().decode("utf-8")
-          matches = [line for line in sums.splitlines() if line.split()[-1].lstrip("*") == sdk]
+          matches = [line for line in sums.splitlines() if line.split()[-1].lstrip("*").removeprefix("./") == sdk]
           if len(matches) != 1:
               raise SystemExit(f"Official SHA256 entry missing or ambiguous for {sdk}")
           expected = matches[0].split()[0]
           archive = Path("/tmp") / sdk
           urlretrieve(base + sdk, archive)
-          actual = hashlib.sha256(archive.read_bytes()).hexdigest()
+          digest = hashlib.sha256()
+with archive.open("rb") as stream:
+    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+        digest.update(chunk)
+actual = digest.hexdigest()
           if actual != expected:
               raise SystemExit(f"SDK SHA256 mismatch: expected {expected}, got {actual}")
           print(f"Verified official SDK: {sdk} ({actual})")
-          import os
           os.makedirs(os.environ["RUNNER_TEMP"] + "/sdk", exist_ok=True)
-          os.system(f"tar --zstd -xf '{archive}' -C '{os.environ['RUNNER_TEMP']}/sdk' --strip-components=1")
+          subprocess.run(["tar", "--zstd", "-xf", str(archive), "-C", os.environ["RUNNER_TEMP"] + "/sdk", "--strip-components=1"], check=True)
           with open(os.environ["GITHUB_ENV"], "a") as env:
-              env.write(f"SDK_DIR={os.environ['RUNNER_TEMP']}/sdk\n")
+              env.write(f"SDK_DIR={os.environ['RUNNER_TEMP']}/sdk\\n")
           PY
 
       - name: Build OpenRung client for target ABI
