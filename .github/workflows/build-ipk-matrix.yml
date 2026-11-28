@@ -292,7 +292,18 @@ jobs:
             big) grep -q 'Data:.*big endian' "$RUNNER_TEMP/elf-header.txt" ;;
           esac
           file "$LUCI_IPK"
-          echo "IPK archive, payload and ELF class/endianness checks passed. Device runtime testing remains required."
+          mkdir -p "$RUNNER_TEMP/ipk-check/luci"
+          LUCI_OUTER="$RUNNER_TEMP/ipk-check/luci-outer"
+          mkdir -p "$LUCI_OUTER"
+          if ar t "$LUCI_IPK" >/dev/null 2>&1; then
+            (cd "$LUCI_OUTER" && ar x "$GITHUB_WORKSPACE/$LUCI_IPK")
+          else
+            tar -xzf "$LUCI_IPK" -C "$LUCI_OUTER"
+          fi
+          test -s "$LUCI_OUTER/data.tar.gz"
+          tar -xzf "$LUCI_OUTER/data.tar.gz" -C "$RUNNER_TEMP/ipk-check/luci"
+          test -s "$RUNNER_TEMP/ipk-check/luci/usr/share/licenses/luci-app-openrung/LICENSE"
+                    echo "IPK archive, payload and ELF class/endianness checks passed. Device runtime testing remains required."
           (cd dist && sha256sum -c SHA256SUMS)
           echo "IPK archive, payload and ELF class/endianness checks passed. Device runtime testing remains required."
 
