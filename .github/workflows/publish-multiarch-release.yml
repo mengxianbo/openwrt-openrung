@@ -1,6 +1,12 @@
 name: 发布多架构 OpenWrt 统一正式版（独立 Release）
 
 on:
+  workflow_run:
+    workflows:
+      - Build installable OpenWrt 25.12 APK matrix
+      - Build installable OpenWrt 24.10 IPK matrix
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       apk_matrix_run_id:
@@ -26,7 +32,7 @@ concurrency:
 
 jobs:
   publish:
-    if: ${{ inputs.publish_confirm == 'PUBLISH-MULTIARCH' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.publish_confirm == 'PUBLISH-MULTIARCH') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout exact packaging revision
@@ -34,34 +40,57 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Validate successful matrix runs and matching source revision
+      - name: Validate both successful matrix runs for the same commit
         id: runs
         env:
           GH_TOKEN: ${{ github.token }}
-          APK_RUN_ID: ${{ inputs.apk_matrix_run_id }}
-          IPK_RUN_ID: ${{ inputs.ipk_matrix_run_id }}
-          EXPECTED_SHA: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          APK_RUN_INPUT: ${{ inputs.apk_matrix_run_id }}
+          IPK_RUN_INPUT: ${{ inputs.ipk_matrix_run_id }}
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
-          [[ "$APK_RUN_ID" =~ ^[0-9]+$ ]] || { echo "Invalid APK run ID" >&2; exit 1; }
-          [[ "$IPK_RUN_ID" =~ ^[0-9]+$ ]] || { echo "Invalid IPK run ID" >&2; exit 1; }
+          if gh release view openwrt-packages-multiarch --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "The separate multi-architecture Release already exists; refusing to overwrite it."
+            exit 0
+          fi
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            APK_RUN_ID="$APK_RUN_INPUT"
+            IPK_RUN_ID="$IPK_RUN_INPUT"
+            [[ "$APK_RUN_ID" =~ ^[0-9]+$ ]] || { echo "Invalid APK run ID" >&2; exit 1; }
+            [[ "$IPK_RUN_ID" =~ ^[0-9]+$ ]] || { echo "Invalid IPK run ID" >&2; exit 1; }
+          else
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs?branch=main&per_page=100" > runs.json
+            APK_RUN_ID="$(jq -r --arg sha "$TRIGGER_SHA" '[.workflow_runs[] | select(.head_branch == "main" and .head_sha == $sha and .conclusion == "success" and (.path | endswith("build-sdk-matrix.yml")))] | sort_by(.created_at) | last | .id // empty' runs.json)"
+            IPK_RUN_ID="$(jq -r --arg sha "$TRIGGER_SHA" '[.workflow_runs[] | select(.head_branch == "main" and .head_sha == $sha and .conclusion == "success" and (.path | endswith("build-ipk-matrix.yml")))] | sort_by(.created_at) | last | .id // empty' runs.json)"
+            if [ -z "$APK_RUN_ID" ] || [ -z "$IPK_RUN_ID" ]; then
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+              echo "The other SDK matrix has not completed successfully for $TRIGGER_SHA; the next workflow completion will retry publication."
+              exit 0
+            fi
+          fi
+
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APK_RUN_ID" > apk-run.json
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$IPK_RUN_ID" > ipk-run.json
           APK_SHA="$(jq -r '.head_sha' apk-run.json)"
           IPK_SHA="$(jq -r '.head_sha' ipk-run.json)"
-          jq -e \
-            '.conclusion == "success" and (.path | endswith("build-sdk-matrix.yml"))' \
-            apk-run.json >/dev/null
-          jq -e \
-            '.conclusion == "success" and (.path | endswith("build-ipk-matrix.yml"))' \
-            ipk-run.json >/dev/null
+          jq -e '.conclusion == "success" and (.path | endswith("build-sdk-matrix.yml"))' apk-run.json >/dev/null
+          jq -e '.conclusion == "success" and (.path | endswith("build-ipk-matrix.yml"))' ipk-run.json >/dev/null
           test "$APK_SHA" = "$IPK_SHA" || { echo "APK/IPK matrix runs used different source commits" >&2; exit 1; }
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            test "$APK_SHA" = "$TRIGGER_SHA" || { echo "Manual release runs do not match this checkout" >&2; exit 1; }
+          else
+            test "$APK_SHA" = "$TRIGGER_SHA" || { echo "Matrix runs do not match the triggering main commit" >&2; exit 1; }
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
           echo "apk_run_id=$APK_RUN_ID" >> "$GITHUB_OUTPUT"
           echo "ipk_run_id=$IPK_RUN_ID" >> "$GITHUB_OUTPUT"
           echo "build_sha=$APK_SHA" >> "$GITHUB_OUTPUT"
           echo "Both successful matrix runs match source commit $APK_SHA."
-
       - name: Download APK matrix artifacts
+        if: ${{ steps.runs.outputs.ready == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ steps.runs.outputs.apk_run_id }}
@@ -73,6 +102,7 @@ jobs:
           test "$(find artifacts/apk-matrix -type f -name '*.apk' | wc -l)" -eq 20
 
       - name: Download IPK matrix artifacts
+        if: ${{ steps.runs.outputs.ready == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ steps.runs.outputs.ipk_run_id }}
@@ -84,6 +114,7 @@ jobs:
           test "$(find artifacts/ipk-matrix -type f -name '*.ipk' | wc -l)" -eq 20
 
       - name: Collect existing x86_64 stable packages without changing the old Release
+        if: ${{ steps.runs.outputs.ready == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -98,6 +129,7 @@ jobs:
           test "$(find artifacts/x86 -maxdepth 1 -type f | wc -l)" -eq 4
 
       - name: Assemble and verify independent multi-architecture Release
+        if: ${{ steps.runs.outputs.ready == 'true' }}
         env:
           APK_RUN_ID: ${{ steps.runs.outputs.apk_run_id }}
           IPK_RUN_ID: ${{ steps.runs.outputs.ipk_run_id }}
@@ -163,6 +195,7 @@ jobs:
           ls -lh dist
 
       - name: Publish a new independent formal Release (old Release is untouched)
+        if: ${{ steps.runs.outputs.ready == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: openwrt-packages-multiarch
