@@ -141,6 +141,10 @@ jobs:
           find artifacts/apk-matrix -type f -name '*.apk' -exec cp -v {} dist/ \;
           find artifacts/ipk-matrix -type f -name '*.ipk' -exec cp -v {} dist/ \;
           cp artifacts/x86/*.apk artifacts/x86/*.ipk dist/
+          find artifacts/x86 -maxdepth 1 -type f \\
+            \( -name 'openrung-corresponding-source-*.tar.gz' -o -name 'openrung-corresponding-source-*.tar.gz.sha256' -o -name 'OPENRUNG-UPSTREAM-LICENSE' -o -name 'PACKAGING-LICENSE' -o -name 'SOURCE-INFO.txt' \) \\
+            -exec cp -v {} dist/ \\
+            ;
 
           find artifacts/apk-matrix artifacts/ipk-matrix -type f -name BUILD-INFO.txt -print0 |
           while IFS= read -r -d '' info; do
