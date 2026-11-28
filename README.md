@@ -29,6 +29,21 @@
 - PassWall 联动：执行 `openrung-client check` 时，若 PassWall 原本正在运行则先暂停，检测结束后自动恢复；原本关闭则保持关闭。
 - 默认使用无 TUN 的本地代理模式。TUN 当前禁用，因为目标设备没有 `/dev/net/tun`。
 
+## 一键自动安装（推荐）
+
+支持自动识别 OpenWrt 衍生系统的包管理器并选择对应格式：检测到 `apk` 时安装 APK，检测到 `opkg` 时安装 IPK；同时检查 CPU 架构、下载文件及 SHA256。需要 root 权限和可访问 GitHub Release 的网络。
+
+```sh
+wget -O /tmp/openrung-install.sh https://raw.githubusercontent.com/mengxianbo/openwrt-openrung/main/install.sh
+sh /tmp/openrung-install.sh
+```
+
+也可以直接查看 [install.sh](./install.sh)。安装器不会把不匹配的包强行安装到设备上；检测到当前没有对应核心包时会停止并说明原因。
+
+**当前二进制支持边界（请注意）：** 目前统一 Release 中的 OpenRung 核心二进制仅为 `x86_64`。安装器现阶段支持 x86_64 设备上的 APK 或 IPK 包管理器自动选择；ARM64、ARMv7、MIPS/MIPS64、RISC-V 以及其他架构暂未有对应核心包，不能宣称已支持。ImmortalWrt、iStoreOS、Lean、KWR​​T 等衍生固件只有在其架构、包管理器、依赖和 ABI 与现有包兼容时才可能安装；需要逐版本构建和实机验证，不能仅凭发行版名称保证兼容。
+
+安装成功后会启用 OpenRung 服务并检查默认本地代理端口 `44025`。若软件包安装成功但端口未监听，安装器会返回非零状态并提示查看 `logread -e openrung | tail -50`；这不等于节点连接已成功。
+
 ## LuCI 修改端口
 
 进入 OpenRung 页面，修改“本地监听端口”（1–65535），保存并应用后重启 OpenRung。状态栏会显示实际监听地址和端口。默认端口为 44025。
