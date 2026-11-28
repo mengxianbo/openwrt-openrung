@@ -1,10 +1,12 @@
 name: Publish verified SDK APKs to existing Release
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/publish-sdk-apks-to-release.yml'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to append assets to (must be explicitly selected)
+        required: true
+        type: string
 
 permissions:
   actions: read
