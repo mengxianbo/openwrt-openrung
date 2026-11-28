@@ -129,6 +129,7 @@ jobs:
           test "$(find artifacts/x86 -maxdepth 1 -type f | wc -l)" -eq 4
 
       - name: Assemble and verify independent multi-architecture Release
+        id: assemble
         if: ${{ steps.runs.outputs.ready == 'true' }}
         env:
           APK_RUN_ID: ${{ steps.runs.outputs.apk_run_id }}
@@ -149,8 +150,14 @@ jobs:
 
           APK_COUNT="$(find dist -maxdepth 1 -type f -name '*.apk' | wc -l)"
           IPK_COUNT="$(find dist -maxdepth 1 -type f -name '*.ipk' | wc -l)"
+          BUILD_INFO_COUNT="$(find dist -maxdepth 1 -type f -name 'BUILD-INFO-*.txt' | wc -l)"
           test "$APK_COUNT" -eq 22
           test "$IPK_COUNT" -eq 22
+          test "$BUILD_INFO_COUNT" -eq 20
+          UPSTREAM_COMMITS="$(grep -h '^OpenRung commit:' dist/BUILD-INFO-*.txt | awk '{print $3}' | sort -u)"
+          test "$(printf '%s\n' "$UPSTREAM_COMMITS" | grep -c .)" -eq 1
+          UPSTREAM_COMMIT="$(printf '%s\n' "$UPSTREAM_COMMITS" | head -n 1)"
+          [[ "$UPSTREAM_COMMIT" =~ ^[0-9a-f]{40}$ ]]
 
           for target in \
             arm64-armsr-armv8 armv7-armsr-armv7 mipsel-ramips-mt7621 \
@@ -184,6 +191,7 @@ jobs:
           OpenWrt 24.10.8 IPK matrix run: ${IPK_RUN_ID}
           APK package count: ${APK_COUNT}
           IPK package count: ${IPK_COUNT}
+          Exact OpenRung upstream commit: ${UPSTREAM_COMMIT}
           x86_64 packages are carried forward from the existing openwrt-packages Release.
           ARM, MIPS and RISC-V packages are SDK-built artifacts from the two validated matrix runs.
           Target hardware runtime verification is still recommended before deployment.
@@ -192,7 +200,69 @@ jobs:
             cd dist
             find . -maxdepth 1 -type f ! -name 'SHA256SUMS-RELEASE*' -printf '%f\n' | sort | xargs -r sha256sum > SHA256SUMS-RELEASE
           )
+          echo "upstream_commit=$UPSTREAM_COMMIT" >> "$GITHUB_OUTPUT"
           ls -lh dist
+
+      - name: Set up Go for corresponding-source archive
+        if: ${{ steps.runs.outputs.ready == 'true' }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.5"
+          cache: false
+
+      - name: Create exact packaging and vendored upstream source archive
+        if: ${{ steps.runs.outputs.ready == 'true' }}
+        env:
+          MATRIX_BUILD_SHA: ${{ steps.runs.outputs.build_sha }}
+          UPSTREAM_COMMIT: ${{ steps.assemble.outputs.upstream_commit }}
+          APK_RUN_ID: ${{ steps.runs.outputs.apk_run_id }}
+          IPK_RUN_ID: ${{ steps.runs.outputs.ipk_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p source-bundle/packaging source-bundle/upstream source-bundle/notices
+          git fetch --depth=1 origin "$MATRIX_BUILD_SHA"
+          git archive --format=tar.gz --prefix="openwrt-openrung-$MATRIX_BUILD_SHA/" "$MATRIX_BUILD_SHA" > "source-bundle/packaging/openwrt-openrung-source-$MATRIX_BUILD_SHA.tar.gz"
+          git clone --filter=blob:none https://github.com/openrung/openrung.git upstream-source
+          git -C upstream-source fetch --depth 1 origin "$UPSTREAM_COMMIT"
+          git -C upstream-source checkout --detach FETCH_HEAD
+          test "$(git -C upstream-source rev-parse HEAD)" = "$UPSTREAM_COMMIT"
+          (
+            cd upstream-source
+            go mod vendor
+            test -s vendor/modules.txt
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go list -mod=vendor -tags='with_utls,with_external_windivert' ./cmd/client >/dev/null
+          )
+          tar --exclude='./.git' --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - -C upstream-source . | gzip -n > "source-bundle/upstream/openrung-upstream-$UPSTREAM_COMMIT-with-vendor.tar.gz"
+          cp LICENSE COPYRIGHT.md THIRD_PARTY_NOTICES.md DISTRIBUTION-NOTICE-ADDENDUM.md source-bundle/notices/
+          cp upstream-source/LICENSE source-bundle/notices/OPENRUNG-UPSTREAM-LICENSE.txt
+          cp upstream-source/THIRD_PARTY_NOTICES.md source-bundle/notices/OPENRUNG-THIRD-PARTY-NOTICES.md
+          MODULE_COUNT="$(grep -c '^# ' upstream-source/vendor/modules.txt || true)"
+          LICENSE_COUNT="$(find upstream-source/vendor -type f \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) | wc -l)"
+          test "$MODULE_COUNT" -gt 0
+          test "$LICENSE_COUNT" -gt 0
+          cat > source-bundle/SOURCE-MANIFEST.txt <<EOF
+          OpenRung OpenWrt multi-architecture corresponding source
+          Packaging repository: https://github.com/${GITHUB_REPOSITORY}
+          Exact packaging commit: ${MATRIX_BUILD_SHA}
+          Upstream repository: https://github.com/openrung/openrung
+          Exact upstream commit: ${UPSTREAM_COMMIT}
+          OpenWrt 25.12 APK matrix run: ${APK_RUN_ID}
+          OpenWrt 24.10.8 IPK matrix run: ${IPK_RUN_ID}
+          Vendored Go module entries: ${MODULE_COUNT}
+          Vendor license/notice files found: ${LICENSE_COUNT}
+          The archive contains exact packaging source, exact upstream source with vendored Go dependencies,
+          build metadata, project license, upstream license and third-party notices.
+          EOF
+          (
+            cd source-bundle
+            find . -type f -printf '%P\n' | sort | xargs -r sha256sum > SHA256SUMS-SOURCE
+            sha256sum SHA256SUMS-SOURCE > SHA256SUMS-SOURCE.sha256
+          )
+          BUNDLE="openrung-corresponding-source-$UPSTREAM_COMMIT.tar.gz"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf "dist/$BUNDLE" -C source-bundle .
+          (cd dist && sha256sum "$BUNDLE" > "$BUNDLE.sha256" && sha256sum -c "$BUNDLE.sha256")
+          tar -tzf "dist/$BUNDLE" >/dev/null
+          echo "Created exact source bundle: $BUNDLE"
 
       - name: Publish a new independent formal Release (old Release is untouched)
         if: ${{ steps.runs.outputs.ready == 'true' }}
@@ -213,6 +283,7 @@ jobs:
             - x86_64：保留原有稳定包名。
             - ZIP 合集：分别提供 25.12 APK 与 24.10 IPK 多架构合集。
             - 每个安装包均提供独立 .sha256 校验文件。
+            - 提供与本次多架构构建精确对应的上游源码、vendor 依赖和打包源码归档。
 
             ## 兼容性说明
 
