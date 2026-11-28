@@ -1,0 +1,36 @@
+name: Publish verified SDK APKs to existing Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-sdk-apks-to-release.yml'
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download successful SDK matrix artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eux
+          mkdir -p downloads dist
+          gh run download 46135506876 --repo "${GITHUB_REPOSITORY}" \
+            --pattern 'openrung-openwrt-25.12-*' --dir downloads
+          find downloads -type f -name '*.apk' -exec cp -v {} dist/ \;
+          test "$(find dist -maxdepth 1 -name '*.apk' | wc -l)" -eq 6
+          (cd dist && sha256sum *.apk > SHA256SUMS-ARM-MATRIX.txt)
+          ls -lh dist
+
+      - name: Append APKs to existing formal Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eux
+          gh release upload openwrt-packages dist/*.apk dist/SHA256SUMS-ARM-MATRIX.txt \
+            --repo "${GITHUB_REPOSITORY}"
