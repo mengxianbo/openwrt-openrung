@@ -1,4 +1,4 @@
-name: Build installable OpenWrt SDK packages
+name: Build installable OpenWrt 25.12 APK matrix
 
 on:
   workflow_dispatch:
@@ -37,23 +37,36 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # x86_64 is built and published by build-apk.yml.
           - name: arm64-armsr-armv8
             target: armsr/armv8
-            sdk: openwrt-sdk-25.12.6-armsr-armv8_gcc-14.3.0_musl.Linux-x86_64.tar.zst
-            sha: cbf3343bc3d6dc6180fc84077b966c13596a79904adaadbfe68409d563b0b596
             goarch: arm64
           - name: armv7-armsr-armv7
             target: armsr/armv7
-            sdk: openwrt-sdk-25.12.6-armsr-armv7_gcc-14.3.0_musl_eabi.Linux-x86_64.tar.zst
-            sha: b29c5b96d757c3518a4f4df18e3187e16de618381625847b8874461935358179
             goarch: arm
             goarm: '7'
           - name: mipsel-ramips-mt7621
             target: ramips/mt7621
-            sdk: openwrt-sdk-25.12.6-ramips-mt7621_gcc-14.3.0_musl.Linux-x86_64.tar.zst
-            sha: e4e3f25962ddf3ed55207fed456ecd1d6e55f3482c976b3183a640df6ef0adf0
             goarch: mipsle
             gomips: softfloat
+          - name: mips-malta-be
+            target: malta/be
+            goarch: mips
+            gomips: softfloat
+          - name: mipsel-malta-le
+            target: malta/le
+            goarch: mipsle
+            gomips: softfloat
+          - name: mips64el-malta-le64
+            target: malta/le64
+            goarch: mips64le
+            gomips64: softfloat
+          - name: riscv64-sifiveu
+            target: sifiveu/generic
+            goarch: riscv64
+          - name: riscv64-starfive
+            target: starfive/generic
+            goarch: riscv64
 
     steps:
       - uses: actions/checkout@v4
@@ -70,26 +83,61 @@ jobs:
           go-version: '1.25.5'
           cache: false
 
-      - name: Download and verify target SDK
+      - name: Download and verify official OpenWrt SDK
         env:
           TARGET: ${{ matrix.target }}
-          SDK_FILE: ${{ matrix.sdk }}
-          SDK_SHA: ${{ matrix.sha }}
+          RELEASE: 25.12.6
         run: |
           set -eux
-          URL="https://downloads.openwrt.org/releases/25.12.6/targets/$TARGET/$SDK_FILE"
-          wget -q "$URL" -O "/tmp/$SDK_FILE"
-          echo "$SDK_SHA  /tmp/$SDK_FILE" | sha256sum -c -
-          mkdir -p "$RUNNER_TEMP/sdk"
-          tar --zstd -xf "/tmp/$SDK_FILE" -C "$RUNNER_TEMP/sdk" --strip-components=1
-          echo "SDK_DIR=$RUNNER_TEMP/sdk" >> "$GITHUB_ENV"
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.request import urlopen, urlretrieve
+          import hashlib, re
 
-      - name: Build OpenRung binary for SDK target
+          target = __import__("os").environ["TARGET"]
+          release = __import__("os").environ["RELEASE"]
+          base = f"https://downloads.openwrt.org/releases/{release}/targets/{target}/"
+          class Links(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.links = []
+              def handle_starttag(self, tag, attrs):
+                  if tag == "a":
+                      href = dict(attrs).get("href", "")
+                      if href.startswith("openwrt-sdk-") and href.endswith(".tar.zst"):
+                          self.links.append(href)
+
+          parser = Links()
+          parser.feed(urlopen(base).read().decode("utf-8"))
+          if len(parser.links) != 1:
+              raise SystemExit(f"Expected exactly one official SDK for {target}; found {parser.links}")
+          sdk = parser.links[0]
+          sums = urlopen(base + "sha256sums").read().decode("utf-8")
+          matches = [line for line in sums.splitlines() if line.split()[-1].lstrip("*") == sdk]
+          if len(matches) != 1:
+              raise SystemExit(f"Official SHA256 entry missing or ambiguous for {sdk}")
+          expected = matches[0].split()[0]
+          archive = Path("/tmp") / sdk
+          urlretrieve(base + sdk, archive)
+          actual = hashlib.sha256(archive.read_bytes()).hexdigest()
+          if actual != expected:
+              raise SystemExit(f"SDK SHA256 mismatch: expected {expected}, got {actual}")
+          print(f"Verified official SDK: {sdk} ({actual})")
+          import os
+          os.makedirs(os.environ["RUNNER_TEMP"] + "/sdk", exist_ok=True)
+          os.system(f"tar --zstd -xf '{archive}' -C '{os.environ['RUNNER_TEMP']}/sdk' --strip-components=1")
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write(f"SDK_DIR={os.environ['RUNNER_TEMP']}/sdk\n")
+          PY
+
+      - name: Build OpenRung client for target ABI
         env:
           INPUT_REF: ${{ inputs.openrung_ref }}
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm || '' }}
           GOMIPS: ${{ matrix.gomips || '' }}
+          GOMIPS64: ${{ matrix.gomips64 || '' }}
         run: |
           set -eux
           REF="${INPUT_REF:-main}"
@@ -105,15 +153,11 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import shutil
-
           vendor = Path("vendor")
-          destination = Path("third-party-licenses")
+          destination = Path("../third-party-licenses")
           count = 0
           for source in vendor.rglob("*"):
-              if not source.is_file():
-                  continue
-              name = source.name.lower()
-              if name.startswith(("license", "copying", "notice")):
+              if source.is_file() and source.name.lower().startswith(("license", "copying", "notice")):
                   target = destination / source.relative_to(vendor)
                   target.parent.mkdir(parents=True, exist_ok=True)
                   shutil.copy2(source, target)
@@ -122,13 +166,15 @@ jobs:
               raise SystemExit("No vendored license/notice files found")
           print(f"Collected {count} license/notice files")
           PY
-          CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" GOARM="$GOARM" GOMIPS="$GOMIPS" \
+          CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" GOARM="$GOARM" GOMIPS="$GOMIPS" GOMIPS64="$GOMIPS64" \
             go build -mod=vendor -trimpath -tags 'with_utls,with_external_windivert' \
             -ldflags='-s -w' -o ../openrung-client.bin ./cmd/client
           file ../openrung-client.bin
           test -s ../openrung-client.bin
 
-      - name: Build installable APKs with OpenWrt SDK
+      - name: Build native APK packages using target SDK
+        env:
+          TARGET_NAME: ${{ matrix.name }}
         run: |
           set -eux
           SDK="$SDK_DIR"
@@ -156,33 +202,31 @@ jobs:
           CLIENT="$(find dist -maxdepth 1 -name 'openrung-client*.apk' -print -quit)"
           LUCI="$(find dist -maxdepth 1 -name 'luci-app-openrung*.apk' -print -quit)"
           test -n "$CLIENT" && test -n "$LUCI"
-          mv "$CLIENT" "dist/openrung-client-${{ matrix.name }}.apk"
-          mv "$LUCI" "dist/luci-app-openrung-${{ matrix.name }}.apk"
+          mv "$CLIENT" "dist/openrung-client-${TARGET_NAME}.apk"
+          mv "$LUCI" "dist/luci-app-openrung-${TARGET_NAME}.apk"
           (cd dist && sha256sum *.apk > SHA256SUMS)
-          printf 'OpenWrt 25.12.6 SDK target: %s\nOpenRung commit: %s\n' \
+          printf 'OpenWrt release: 25.12.6\nTarget: %s\nOpenRung commit: %s\n' \
             '${{ matrix.target }}' "$OPENRUNG_COMMIT" > dist/BUILD-INFO.txt
           ls -lh dist
 
-      - name: Verify APK archives and metadata
+      - name: Verify package payloads and ABI
         run: |
           set -eux
           APK="$SDK_DIR/staging_dir/host/bin/apk"
           test -x "$APK"
           CLIENT_APK="$(find dist -maxdepth 1 -name 'openrung-client-*.apk' -print -quit)"
           LUCI_APK="$(find dist -maxdepth 1 -name 'luci-app-openrung-*.apk' -print -quit)"
-          test -s "$CLIENT_APK"
-          test -s "$LUCI_APK"
-
-          # Extract with apk-tools v3: this validates the ADB/APKv3 container
-          # and reads payloads without dependency resolution or package installation.
+          test -s "$CLIENT_APK" && test -s "$LUCI_APK"
           ROOT="$RUNNER_TEMP/apk-root"
           mkdir -p "$ROOT/client" "$ROOT/luci"
           "$APK" extract --allow-untrusted --no-chown --destination "$ROOT/client" "$CLIENT_APK"
           "$APK" extract --allow-untrusted --no-chown --destination "$ROOT/luci" "$LUCI_APK"
-
           test -s "$ROOT/client/usr/libexec/openrung-client.bin"
+          test -s "$ROOT/client/etc/init.d/openrung"
           test -s "$ROOT/luci/usr/share/licenses/luci-app-openrung/LICENSE"
-          echo "Both OpenWrt APKv3 packages were parsed and their payloads verified."
+          file "$ROOT/client/usr/libexec/openrung-client.bin"
+          readelf -h "$ROOT/client/usr/libexec/openrung-client.bin"
+          echo "APK archive and package payload checks passed. Runtime testing on hardware/emulation is still required."
 
       - uses: actions/upload-artifact@v4
         with:
@@ -200,6 +244,6 @@ jobs:
         env:
           RESULT: ${{ needs.sdk.result }}
         run: |
-          echo "OpenWrt SDK APK matrix: $RESULT"
-          echo "Artifacts only; the existing formal Release is not changed."
+          echo "OpenWrt 25.12 SDK APK matrix: $RESULT"
+          echo "Artifacts are build/test outputs only; formal Release is not changed automatically."
           test "$RESULT" = success
