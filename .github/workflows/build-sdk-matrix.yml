@@ -100,6 +100,15 @@ jobs:
           cd upstream
           go mod vendor
           test -s vendor/modules.txt
+          LICENSE_DIR="$GITHUB_WORKSPACE/third-party-licenses"
+          mkdir -p "$LICENSE_DIR"
+          while IFS= read -r -d '' file; do
+            rel="${file#vendor/}"
+            mkdir -p "$LICENSE_DIR/$(dirname "$rel")"
+            install -m 0644 "$file" "$LICENSE_DIR/$rel"
+          done < <(find vendor -type f \\
+            \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) -print0)
+          test -n "$(find "$LICENSE_DIR" -type f -print -quit)"
           CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" GOARM="$GOARM" GOMIPS="$GOMIPS" \
             go build -mod=vendor -trimpath -tags 'with_utls,with_external_windivert' \
             -ldflags='-s -w' -o ../openrung-client.bin ./cmd/client
@@ -118,6 +127,8 @@ jobs:
           cp upstream/LICENSE upstream/THIRD_PARTY_NOTICES.md \
             "$SDK/package/openrung-client/files/"
           cp COPYRIGHT.md "$SDK/package/openrung-client/files/COPYRIGHT.md"
+          mkdir -p "$SDK/package/openrung-client/files/licenses/third-party"
+          cp -a third-party-licenses/. "$SDK/package/openrung-client/files/licenses/third-party/"
           cp package/openrung-client/Makefile "$SDK/package/openrung-client/Makefile"
           cp -a package/luci-app-openrung "$SDK/package/"
           cp LICENSE COPYRIGHT.md DISTRIBUTION-NOTICE-ADDENDUM.md "$SDK/"
