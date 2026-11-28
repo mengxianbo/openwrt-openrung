@@ -166,14 +166,33 @@ jobs:
       - name: Verify APK archives and metadata
         run: |
           set -eux
-          APK="$SDK_DIR/staging_dir/host/bin/apk"
-          test -x "$APK"
-          for f in dist/*.apk; do
-            "$APK" info --allow-untrusted "$f"
-            "$APK" extract --allow-untrusted --no-chown --destination "$RUNNER_TEMP/extract" "$f"
-          done
-          test -s "$RUNNER_TEMP/extract/usr/libexec/openrung-client.bin" || \
-            test -s "$RUNNER_TEMP/extract/usr/share/licenses/luci-app-openrung/LICENSE"
+          mkdir -p "$RUNNER_TEMP/apk-verify"
+          CLIENT_APK="$(find dist -maxdepth 1 -name 'openrung-client-*.apk' -print -quit)"
+          LUCI_APK="$(find dist -maxdepth 1 -name 'luci-app-openrung-*.apk' -print -quit)"
+          test -n "$CLIENT_APK"
+          test -n "$LUCI_APK"
+
+          # OpenWrt APK packages are tar-based archives. Do not invoke apk info:
+          # that command expects an installed package database on the host.
+          tar -tzf "$CLIENT_APK" > "$RUNNER_TEMP/client-files.txt"
+          tar -tzf "$LUCI_APK" > "$RUNNER_TEMP/luci-files.txt"
+          grep -Eq '(^|/)usr/libexec/openrung-client\.bin$' "$RUNNER_TEMP/client-files.txt"
+          grep -Eq '(^|/)usr/share/licenses/luci-app-openrung/LICENSE$' "$RUNNER_TEMP/luci-files.txt"
+
+          mkdir -p "$RUNNER_TEMP/apk-verify/client" "$RUNNER_TEMP/apk-verify/luci"
+          tar -xzf "$CLIENT_APK" -C "$RUNNER_TEMP/apk-verify/client"
+          tar -xzf "$LUCI_APK" -C "$RUNNER_TEMP/apk-verify/luci"
+          test -s "$RUNNER_TEMP/apk-verify/client/usr/libexec/openrung-client.bin"
+          test -s "$RUNNER_TEMP/apk-verify/luci/usr/share/licenses/luci-app-openrung/LICENSE"
+
+          # Confirm package metadata exists and identifies the expected packages.
+          tar -xOzf "$CLIENT_APK" .PKGINFO | tee "$RUNNER_TEMP/client.PKGINFO"
+          tar -xOzf "$LUCI_APK" .PKGINFO | tee "$RUNNER_TEMP/luci.PKGINFO"
+          grep -q '^name = openrung-client$' "$RUNNER_TEMP/client.PKGINFO"
+          grep -q '^name = luci-app-openrung$' "$RUNNER_TEMP/luci.PKGINFO"
+          grep -q '^arch = ' "$RUNNER_TEMP/client.PKGINFO"
+          grep -q '^arch = ' "$RUNNER_TEMP/luci.PKGINFO"
+          echo "Both APK archives, package metadata, and required payload files verified."
 
       - uses: actions/upload-artifact@v4
         with:
