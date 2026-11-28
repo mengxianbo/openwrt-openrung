@@ -264,6 +264,19 @@ jobs:
           tar -tzf "dist/$BUNDLE" >/dev/null
           echo "Created exact source bundle: $BUNDLE"
 
+      - name: Finalize release manifest after adding corresponding source
+        if: ${{ steps.runs.outputs.ready == 'true' }}
+        run: |
+          set -euo pipefail
+          BUNDLE="$(find dist -maxdepth 1 -type f -name 'openrung-corresponding-source-*.tar.gz' -print -quit)"
+          test -s "$BUNDLE"
+          echo "Corresponding source archive: $(basename "$BUNDLE")" >> dist/BUILD-MANIFEST.txt
+          (
+            cd dist
+            find . -maxdepth 1 -type f ! -name 'SHA256SUMS-RELEASE*' -printf '%f\n' | sort | xargs -r sha256sum > SHA256SUMS-RELEASE
+            sha256sum -c "$(basename "$BUNDLE").sha256"
+          )
+
       - name: Publish a new independent formal Release (old Release is untouched)
         if: ${{ steps.runs.outputs.ready == 'true' }}
         uses: softprops/action-gh-release@v2
