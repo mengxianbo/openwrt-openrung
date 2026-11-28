@@ -39,14 +39,18 @@
 
 ## 一键自动安装（推荐）
 
-支持自动识别 OpenWrt 衍生系统的包管理器并选择对应格式：检测到 `apk` 时安装 APK，检测到 `opkg` 时安装 IPK；同时检查 CPU 架构、下载文件及 SHA256。需要 root 权限和可访问 GitHub Release 的网络。
+**以下命令与仓库根目录的 [install.sh](./install.sh) 保持同步。** 命令会下载 `main` 分支当前最新版安装脚本，因此脚本更新后无需修改路由器上的命令。需要使用 root 用户，并确保路由器能够访问 GitHub。
 
 ```sh
 wget -O /tmp/openrung-install.sh https://raw.githubusercontent.com/mengxianbo/openwrt-openrung/main/install.sh
 sh /tmp/openrung-install.sh
 ```
 
-也可以直接查看 [install.sh](./install.sh)。安装器不会把不匹配的包强行安装到设备上；检测到当前没有对应核心包时会停止并说明原因。
+安装器会自动识别包管理器：检测到 `apk` 时选择 APK，检测到 `opkg` 时选择 IPK；下载后验证 SHA256，再安装、启用服务并检查默认代理端口 `44025`。
+
+**当前正式安装包支持范围：仅 x86_64 核心包。** OpenWrt 25.12 x86_64 可走 APK；使用 opkg 的 x86_64 固件可走 IPK。ARM64、ARMv7、MIPS/MIPS64、RISC-V 等架构目前没有对应核心安装包，安装器会明确报错并停止，不会尝试安装错误架构的软件包。不能仅凭 OpenWrt 版本号或固件名称保证兼容，仍需核对 CPU 架构、包管理器、依赖和 ABI。
+
+脚本和说明同步维护：修改安装脚本时应同时更新本节；若架构安装包尚未进入统一 Release，不得在说明中标记为已支持。
 
 **当前二进制支持边界（请注意）：** 目前统一 Release 中的 OpenRung 核心二进制仅为 `x86_64`。安装器现阶段支持 x86_64 设备上的 APK 或 IPK 包管理器自动选择；ARM64、ARMv7、MIPS/MIPS64、RISC-V 以及其他架构暂未有对应核心包，不能宣称已支持。ImmortalWrt、iStoreOS、Lean、KWR​​T 等衍生固件只有在其架构、包管理器、依赖和 ABI 与现有包兼容时才可能安装；需要逐版本构建和实机验证，不能仅凭发行版名称保证兼容。
 
