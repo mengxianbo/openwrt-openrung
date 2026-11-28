@@ -17,7 +17,7 @@ command -v uname >/dev/null 2>&1 || die "缺少 uname。"
 ARCH="$(uname -m)"
 case "$ARCH" in
   x86_64|amd64) ;;
-  *) die "当前架构为 $ARCH。当前 Release 只有 x86_64 核心包，拒绝安装；ARM/MIPS/RISC-V 包尚未发布。" ;;
+  *) die "当前架构为 $ARCH。当前 Release 仅提供 x86_64 核心包，已安全停止安装。支持范围及最新命令见：https://github.com/mengxianbo/openwrt-openrung#一键自动安装推荐" ;;
 esac
 
 if command -v apk >/dev/null 2>&1; then
