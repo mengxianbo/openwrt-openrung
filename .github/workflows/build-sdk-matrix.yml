@@ -102,13 +102,26 @@ jobs:
           test -s vendor/modules.txt
           LICENSE_DIR="$GITHUB_WORKSPACE/third-party-licenses"
           mkdir -p "$LICENSE_DIR"
-          while IFS= read -r -d '' file; do
-            rel="${file#vendor/}"
-            mkdir -p "$LICENSE_DIR/$(dirname "$rel")"
-            install -m 0644 "$file" "$LICENSE_DIR/$rel"
-          done < <(find vendor -type f \\
-            \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) -print0)
-          test -n "$(find "$LICENSE_DIR" -type f -print -quit)"
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+
+          vendor = Path("vendor")
+          destination = Path("third-party-licenses")
+          count = 0
+          for source in vendor.rglob("*"):
+              if not source.is_file():
+                  continue
+              name = source.name.lower()
+              if name.startswith(("license", "copying", "notice")):
+                  target = destination / source.relative_to(vendor)
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(source, target)
+                  count += 1
+          if count == 0:
+              raise SystemExit("No vendored license/notice files found")
+          print(f"Collected {count} license/notice files")
+          PY
           CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" GOARM="$GOARM" GOMIPS="$GOMIPS" \
             go build -mod=vendor -trimpath -tags 'with_utls,with_external_windivert' \
             -ldflags='-s -w' -o ../openrung-client.bin ./cmd/client
