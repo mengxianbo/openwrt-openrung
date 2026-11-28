@@ -47,15 +47,19 @@ jobs:
           [[ "$IPK_RUN_ID" =~ ^[0-9]+$ ]] || { echo "Invalid IPK run ID" >&2; exit 1; }
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APK_RUN_ID" > apk-run.json
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$IPK_RUN_ID" > ipk-run.json
-          jq -e --arg sha "$EXPECTED_SHA" \
-            '.conclusion == "success" and .head_sha == $sha and (.path | endswith("build-sdk-matrix.yml"))' \
+          APK_SHA="$(jq -r '.head_sha' apk-run.json)"
+          IPK_SHA="$(jq -r '.head_sha' ipk-run.json)"
+          jq -e \
+            '.conclusion == "success" and (.path | endswith("build-sdk-matrix.yml"))' \
             apk-run.json >/dev/null
-          jq -e --arg sha "$EXPECTED_SHA" \
-            '.conclusion == "success" and .head_sha == $sha and (.path | endswith("build-ipk-matrix.yml"))' \
+          jq -e \
+            '.conclusion == "success" and (.path | endswith("build-ipk-matrix.yml"))' \
             ipk-run.json >/dev/null
+          test "$APK_SHA" = "$IPK_SHA" || { echo "APK/IPK matrix runs used different source commits" >&2; exit 1; }
           echo "apk_run_id=$APK_RUN_ID" >> "$GITHUB_OUTPUT"
           echo "ipk_run_id=$IPK_RUN_ID" >> "$GITHUB_OUTPUT"
-          echo "Both successful matrix runs match packaging commit $EXPECTED_SHA."
+          echo "build_sha=$APK_SHA" >> "$GITHUB_OUTPUT"
+          echo "Both successful matrix runs match source commit $APK_SHA."
 
       - name: Download APK matrix artifacts
         env:
@@ -97,6 +101,7 @@ jobs:
         env:
           APK_RUN_ID: ${{ steps.runs.outputs.apk_run_id }}
           IPK_RUN_ID: ${{ steps.runs.outputs.ipk_run_id }}
+          MATRIX_BUILD_SHA: ${{ steps.runs.outputs.build_sha }}
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -141,7 +146,8 @@ jobs:
           cat > dist/BUILD-MANIFEST.txt <<EOF
           OpenRung multi-architecture OpenWrt package release
           Packaging repository: https://github.com/${GITHUB_REPOSITORY}
-          Packaging commit: ${GITHUB_SHA}
+          Release workflow commit: ${GITHUB_SHA}
+          Exact matrix packaging commit: ${MATRIX_BUILD_SHA}
           OpenWrt 25.12 APK matrix run: ${APK_RUN_ID}
           OpenWrt 24.10.8 IPK matrix run: ${IPK_RUN_ID}
           APK package count: ${APK_COUNT}
