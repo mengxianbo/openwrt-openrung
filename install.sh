@@ -88,6 +88,21 @@ say "选择 LuCI 包：$LUCI"
 mkdir -p "$WORK"
 cd "$WORK"
 
+LEGACY_RELEASE=0
+if ! wget -q -O "$WORK/BUILD-MANIFEST.txt" "$BASE/BUILD-MANIFEST.txt"; then
+  case "$TARGET" in
+    x86/64)
+      say "多架构 Release 尚未发布，x86_64 暂时沿用原正式版。"
+      RELEASE_TAG="openwrt-packages"
+      BASE="https://github.com/${REPO}/releases/download/${RELEASE_TAG}"
+      LEGACY_RELEASE=1
+      ;;
+    *)
+      die "多架构正式版尚未发布。当前设备不是旧版 x86_64 支持目标；请等待新 Release 完成，未发布架构不会回退安装。"
+      ;;
+  esac
+fi
+
 fetch() {
   url="$1"
   out="$2"
@@ -98,12 +113,19 @@ fetch() {
 
 fetch "$BASE/$CLIENT" "$CLIENT"
 fetch "$BASE/$LUCI" "$LUCI"
-fetch "$BASE/$CLIENT.sha256" "$CLIENT.sha256"
-fetch "$BASE/$LUCI.sha256" "$LUCI.sha256"
-
-say "验证 SHA256"
-sha256sum -c "$CLIENT.sha256" >/dev/null 2>&1 || die "$CLIENT SHA256 校验失败。"
-sha256sum -c "$LUCI.sha256" >/dev/null 2>&1 || die "$LUCI SHA256 校验失败。"
+if [ "$LEGACY_RELEASE" = "1" ]; then
+  if [ "$PM" = "apk" ]; then SUMS="APK-SHA256SUMS"; else SUMS="IPK-SHA256SUMS"; fi
+  fetch "$BASE/$SUMS" "$SUMS"
+  grep -E "[[:space:]]+[*]?($CLIENT|$LUCI)$" "$SUMS" >/dev/null 2>&1 || die "旧正式版校验清单缺少对应安装包。"
+  say "验证旧正式版 SHA256"
+  sha256sum -c "$SUMS" >/dev/null 2>&1 || die "SHA256 校验失败。"
+else
+  fetch "$BASE/$CLIENT.sha256" "$CLIENT.sha256"
+  fetch "$BASE/$LUCI.sha256" "$LUCI.sha256"
+  say "验证 SHA256"
+  sha256sum -c "$CLIENT.sha256" >/dev/null 2>&1 || die "$CLIENT SHA256 校验失败。"
+  sha256sum -c "$LUCI.sha256" >/dev/null 2>&1 || die "$LUCI SHA256 校验失败。"
+fi
 
 # opkg checks the IPK Architecture field against its configured architecture list.\n# Do not use force-depends or force-architecture; ABI mismatches must fail closed.\n
 say "检查临时目录空间"
