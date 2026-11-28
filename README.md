@@ -41,9 +41,14 @@
 
 ## OpenWrt 25.12 APK 安装
 
-OpenWrt 25.12 x86_64 使用 APK 包格式。下面命令会从统一 Release 下载两个 APK（稳定文件名），并安装、启用服务：
+OpenWrt 25.12 x86_64 使用 APK 包格式。请确认设备为 x86_64，并且系统中存在 `apk` 命令。下面命令会从统一 Release 下载两个 OpenWrt APK（不是 Android 应用 APK，稳定文件名），并安装、启用服务：
 
 ```sh
+# 安装前检查：确认架构和 APK 包管理器
+uname -m
+command -v apk || { echo '错误：当前系统找不到 apk；请先确认固件确实为 OpenWrt 25.12 APK 版本，不要继续安装'; exit 1; }
+apk --version
+
 cd /tmp
 wget -O openrung-client_x86_64.apk https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/openrung-client_x86_64.apk
 wget -O luci-app-openrung_all.apk https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/luci-app-openrung_all.apk
@@ -69,6 +74,8 @@ logread -e openrung | tail -50
 也可以下载 [APK 合集 ZIP](https://github.com/mengxianbo/openwrt-openrung/releases/download/openwrt-packages/openrung-openwrt-25.12-x86_64-bundle.zip)，其中包含上述两个稳定命名的 APK。
 
 APK 由 OpenWrt 25.12.6 x86/64 官方 SDK 原生构建；原有 IPK 工作流继续保留，适用于使用 opkg 的旧版 OpenWrt。
+
+**故障排查：** 如果执行 `command -v apk` 没有输出，或安装时提示 `apk: not found`，说明当前运行环境没有可用的 APK 包管理器。此时不要尝试用 `opkg` 安装这两个 APK，也不要继续执行后续 UCI/服务命令；请先核对 `cat /etc/openwrt_release`、`uname -m` 和 `command -v apk` 的输出，确认实际固件版本及架构。
 
 ## 旧版 OpenWrt（opkg / IPK）命令行安装
 
