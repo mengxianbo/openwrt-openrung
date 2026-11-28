@@ -23,7 +23,7 @@
 仓库维护两类多架构工作流：
 
 - [Linux 多架构核心编译](./.github/workflows/build-architecture-matrix.yml)：尝试构建 amd64、arm64、armv7、mips、mipsel、mips64、mips64el、riscv64 核心二进制。
-- [OpenWrt 25.12 SDK 安装包矩阵](./.github/workflows/build-sdk-matrix.yml)：使用 OpenWrt 官方 SDK，为 armsr/armv8、armsr/armv7、ramips/mt7621、malta/be、malta/le、malta/le64、sifiveu/generic、starfive/generic 构建原生 APK，并检查包内容及核心 ELF 文件头。
+- [OpenWrt 25.12 SDK 安装包矩阵](./.github/workflows/build-sdk-matrix.yml)：使用 OpenWrt 官方 SDK，为 armsr/armv8、armsr/armv7、ramips/mt7621、ath79/generic、malta/be、malta/le、malta/le64、octeon/generic、sifiveu/generic、starfive/generic 构建原生 APK，并检查包内容及核心 ELF 文件头。
 
 SDK 工作流会从 OpenWrt 官方目标目录动态发现 SDK，并依据该目录的官方 sha256sums 校验下载文件。构建产物先保存为 GitHub Actions artifacts，**不会自动覆盖现有正式 Release，也不会让安装器提前下载未经验证的架构包**。
 
