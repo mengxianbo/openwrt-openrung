@@ -3,7 +3,6 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=openrung-client
 PKG_VERSION:=0.1.0
 PKG_RELEASE:=1
-PKGARCH:=x86_64
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -16,7 +15,7 @@ define Package/openrung-client
 endef
 
 define Package/openrung-client/description
- OpenRung Linux amd64 client with OpenWrt procd service integration.
+ OpenRung client for the selected OpenWrt SDK target with OpenWrt procd service integration.
 endef
 
 define Build/Prepare
