@@ -1,0 +1,124 @@
+name: OpenRung multi-architecture compatibility builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      openrung_ref:
+        description: Official OpenRung source ref (tag, branch, or commit)
+        required: true
+        default: main
+  pull_request:
+    paths:
+      - '.github/workflows/build-architecture-matrix.yml'
+      - 'package/openrung-client/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-client:
+    name: Linux ${{ matrix.label }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goarch: amd64
+            label: x86_64
+            artifact: openrung-client-linux-amd64
+          - goarch: arm64
+            label: aarch64
+            artifact: openrung-client-linux-arm64
+          - goarch: arm
+            goarm: '7'
+            label: armv7
+            artifact: openrung-client-linux-armv7
+          - goarch: mips
+            gomips: hardfloat
+            label: mips
+            artifact: openrung-client-linux-mips
+          - goarch: mipsle
+            gomips: softfloat
+            label: mipsel
+            artifact: openrung-client-linux-mipsel
+          - goarch: mips64
+            label: mips64
+            artifact: openrung-client-linux-mips64
+          - goarch: mips64le
+            label: mips64el
+            artifact: openrung-client-linux-mips64el
+          - goarch: riscv64
+            label: riscv64
+            artifact: openrung-client-linux-riscv64
+    steps:
+      - name: Checkout packaging repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.5'
+          cache: false
+
+      - name: Checkout official OpenRung source
+        env:
+          INPUT_REF: ${{ inputs.openrung_ref }}
+        run: |
+          set -eux
+          REF="${INPUT_REF:-main}"
+          git init upstream
+          git -C upstream remote add origin https://github.com/openrung/openrung.git
+          git -C upstream fetch --depth 1 origin "$REF"
+          git -C upstream checkout --detach FETCH_HEAD
+          echo "OPENRUNG_COMMIT=$(git -C upstream rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Vendor dependencies
+        working-directory: upstream
+        run: |
+          set -eux
+          go mod vendor
+          test -s vendor/modules.txt
+
+      - name: Build Linux client
+        working-directory: upstream
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm || '' }}
+          GOMIPS: ${{ matrix.gomips || '' }}
+        run: |
+          set -eux
+          OUT="openrung-client-${{ matrix.label }}"
+          go version
+          go build -mod=vendor -trimpath \
+            -tags 'with_utls,with_external_windivert' \
+            -ldflags='-s -w' -o "$OUT" ./cmd/client
+          file "$OUT"
+          test -s "$OUT"
+          mkdir -p "../dist/${{ matrix.label }}"
+          install -m 0755 "$OUT" "../dist/${{ matrix.label }}/openrung-client"
+          printf 'GOOS=linux\nGOARCH=%s\nGOARM=%s\nGOMIPS=%s\nOPENRUNG_COMMIT=%s\n' \
+            "$GOARCH" "$GOARM" "$GOMIPS" "$OPENRUNG_COMMIT" > "../dist/${{ matrix.label }}/BUILD-INFO.txt"
+
+      - name: Upload experimental architecture binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.label }}/
+          if-no-files-found: error
+          retention-days: 30
+
+  summary:
+    name: Build matrix summary
+    if: always()
+    needs: build-client
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Report matrix status
+        env:
+          RESULT: ${{ needs.build-client.result }}
+        run: |
+          echo "Architecture binary build matrix result: $RESULT"
+          echo "These are experimental client binaries only; no OpenWrt APK/IPK packages or Release assets are published by this workflow."
+          test "$RESULT" = success
