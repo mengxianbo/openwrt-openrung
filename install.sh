@@ -105,18 +105,7 @@ say "验证 SHA256"
 sha256sum -c "$CLIENT.sha256" >/dev/null 2>&1 || die "$CLIENT SHA256 校验失败。"
 sha256sum -c "$LUCI.sha256" >/dev/null 2>&1 || die "$LUCI SHA256 校验失败。"
 
-# Check the IPK's declared architecture against opkg's configured architecture
-# list before installation. opkg performs its own dependency/ABI checks too.
-if [ "$PM" = "opkg" ]; then
-  command -v tar >/dev/null 2>&1 || die "缺少 tar，无法检查 IPK 元数据。"
-  mkdir -p "$WORK/control"
-  tar -xOzf "$CLIENT" ./control.tar.gz | tar -xzO - ./control > "$WORK/control/client"
-  PKG_ARCH="$(sed -n 's/^Architecture:[[:space:]]*//p' "$WORK/control/client" | head -n 1)"
-  [ -n "$PKG_ARCH" ] || die "IPK 缺少 Architecture 元数据。"
-  opkg print-architecture | awk '{print $2}' | grep -Fx "$PKG_ARCH" >/dev/null 2>&1 || \
-    die "设备 opkg 未启用包架构 $PKG_ARCH；拒绝强制安装。"
-fi
-
+# opkg checks the IPK Architecture field against its configured architecture list.\n# Do not use force-depends or force-architecture; ABI mismatches must fail closed.\n
 say "检查临时目录空间"
 df -k "$WORK" | tail -1
 
