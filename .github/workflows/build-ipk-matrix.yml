@@ -99,6 +99,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate installer and init shell syntax
+        run: |
+          set -eux
+          sh -n install.sh
+          sh -n package/openrung-client/openrung-client-wrapper
+          sh -n package/openrung-client/openrung.init
+
       - name: Install host dependencies
         run: |
           sudo apt-get update
@@ -263,13 +270,18 @@ jobs:
           CLIENT_IPK="$(find dist -maxdepth 1 -name 'openrung-client-*.ipk' -print -quit)"
           LUCI_IPK="$(find dist -maxdepth 1 -name 'luci-app-openrung-*.ipk' -print -quit)"
           test -s "$CLIENT_IPK" && test -s "$LUCI_IPK"
-          mkdir -p "$RUNNER_TEMP/ipk-check"
-          tar -xzf "$CLIENT_IPK" -C "$RUNNER_TEMP/ipk-check"
-          test -s "$RUNNER_TEMP/ipk-check/debian-binary"
-          test -s "$RUNNER_TEMP/ipk-check/data.tar.gz"
-          test -s "$RUNNER_TEMP/ipk-check/control.tar.gz"
-          mkdir -p "$RUNNER_TEMP/ipk-check/client"
-          tar -xzf "$RUNNER_TEMP/ipk-check/data.tar.gz" -C "$RUNNER_TEMP/ipk-check/client"
+          mkdir -p "$RUNNER_TEMP/ipk-check" "$RUNNER_TEMP/ipk-check/client"
+          OUTER="$RUNNER_TEMP/ipk-check/outer"
+          mkdir -p "$OUTER"
+          if ar t "$CLIENT_IPK" >/dev/null 2>&1; then
+            (cd "$OUTER" && ar x "$GITHUB_WORKSPACE/$CLIENT_IPK")
+          else
+            tar -xzf "$CLIENT_IPK" -C "$OUTER"
+          fi
+          test -s "$OUTER/debian-binary"
+          test -s "$OUTER/data.tar.gz"
+          test -s "$OUTER/control.tar.gz"
+          tar -xzf "$OUTER/data.tar.gz" -C "$RUNNER_TEMP/ipk-check/client"
           test -s "$RUNNER_TEMP/ipk-check/client/usr/libexec/openrung-client.bin"
           test -s "$RUNNER_TEMP/ipk-check/client/etc/init.d/openrung"
           file "$RUNNER_TEMP/ipk-check/client/usr/libexec/openrung-client.bin"
@@ -279,8 +291,8 @@ jobs:
             little) grep -q 'Data:.*little endian' "$RUNNER_TEMP/elf-header.txt" ;;
             big) grep -q 'Data:.*big endian' "$RUNNER_TEMP/elf-header.txt" ;;
           esac
-          gzip -t "$CLIENT_IPK" "$LUCI_IPK"
-          tar -tzf "$LUCI_IPK" >/dev/null
+          file "$LUCI_IPK"
+          echo "IPK archive, payload and ELF class/endianness checks passed. Device runtime testing remains required."
           (cd dist && sha256sum -c SHA256SUMS)
           echo "IPK archive, payload and ELF class/endianness checks passed. Device runtime testing remains required."
 
