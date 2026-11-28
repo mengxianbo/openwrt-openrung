@@ -99,7 +99,7 @@ jobs:
           IPK_RUN_ID: ${{ steps.runs.outputs.ipk_run_id }}
         run: |
           set -euo pipefail
-          mkdir -p dist/build-info
+          mkdir -p dist
           find artifacts/apk-matrix -type f -name '*.apk' -exec cp -v {} dist/ \;
           find artifacts/ipk-matrix -type f -name '*.ipk' -exec cp -v {} dist/ \;
           cp artifacts/x86/*.apk artifacts/x86/*.ipk dist/
@@ -107,7 +107,7 @@ jobs:
           find artifacts/apk-matrix artifacts/ipk-matrix -type f -name BUILD-INFO.txt -print0 |
           while IFS= read -r -d '' info; do
             parent="$(basename "$(dirname "$info")")"
-            install -m 0644 "$info" "dist/build-info/$parent.txt"
+            install -m 0644 "$info" "dist/BUILD-INFO-$parent.txt"
           done
 
           APK_COUNT="$(find dist -maxdepth 1 -type f -name '*.apk' | wc -l)"
