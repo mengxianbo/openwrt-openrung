@@ -8,6 +8,11 @@ on:
         description: "OpenRung git ref (tag/branch/commit)"
         required: false
         default: "main"
+      publish_release:
+        description: "仅在确认后更新正式 Release（默认关闭）"
+        required: false
+        type: boolean
+        default: false
   push:
     paths:
       - "package/**"
@@ -470,6 +475,7 @@ jobs:
           retention-days: 30
 
       - name: Remove obsolete release assets and old releases (IPK workflow)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release == true }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -511,6 +517,7 @@ jobs:
           done
 
       - name: Publish IPK packages to the unified GitHub Release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release == true }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: openwrt-packages
