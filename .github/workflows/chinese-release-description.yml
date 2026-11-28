@@ -6,12 +6,18 @@ on:
     paths:
       - '.github/workflows/chinese-release-description.yml'
   workflow_dispatch:
+    inputs:
+      confirm_legacy_release_update:
+        description: 输入 UPDATE-LEGACY-RELEASE 才允许修改旧正式版说明
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
   translate-release:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_legacy_release_update == 'UPDATE-LEGACY-RELEASE' }}
     runs-on: ubuntu-24.04
     steps:
       - name: 将现有正式版标题和说明改为中文

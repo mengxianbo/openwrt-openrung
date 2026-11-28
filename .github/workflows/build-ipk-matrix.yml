@@ -1,0 +1,322 @@
+name: Build installable OpenWrt 24.10 IPK matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      openrung_ref:
+        description: OpenRung upstream ref
+        required: true
+        default: main
+  push:
+    paths:
+      - '.github/workflows/build-ipk-matrix.yml'
+      - 'package/openrung-client/**'
+      - 'package/luci-app-openrung/**'
+      - 'DISTRIBUTION-NOTICE-ADDENDUM.md'
+      - 'COPYRIGHT.md'
+      - 'LICENSE'
+      - 'THIRD_PARTY_NOTICES.md'
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sdk:
+    name: OpenWrt 24.10 IPK - ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # x86/64 is built by the existing x86_64 IPK workflow.
+          - name: arm64-armsr-armv8
+            target: armsr/armv8
+            goarch: arm64
+            elf_class: ELF64
+            elf_data: little
+          - name: armv7-armsr-armv7
+            target: armsr/armv7
+            goarch: arm
+            goarm: '7'
+            elf_class: ELF32
+            elf_data: little
+          - name: mipsel-ramips-mt7621
+            target: ramips/mt7621
+            goarch: mipsle
+            gomips: softfloat
+            elf_class: ELF32
+            elf_data: little
+          - name: mips-malta-be
+            target: malta/be
+            goarch: mips
+            gomips: softfloat
+            elf_class: ELF32
+            elf_data: big
+          - name: mips-ath79-generic
+            target: ath79/generic
+            goarch: mips
+            gomips: softfloat
+            elf_class: ELF32
+            elf_data: big
+          - name: mipsel-malta-le
+            target: malta/le
+            goarch: mipsle
+            gomips: softfloat
+            elf_class: ELF32
+            elf_data: little
+          - name: mips64el-malta-le64
+            target: malta/le64
+            goarch: mips64le
+            gomips64: softfloat
+            elf_class: ELF64
+            elf_data: little
+          - name: mips64-octeon
+            target: octeon/generic
+            goarch: mips64
+            gomips64: hardfloat
+            elf_class: ELF64
+            elf_data: big
+          - name: riscv64-sifiveu
+            target: sifiveu/generic
+            goarch: riscv64
+            elf_class: ELF64
+            elf_data: little
+          - name: riscv64-starfive
+            target: starfive/generic
+            goarch: riscv64
+            elf_class: ELF64
+            elf_data: little
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate installer and init shell syntax
+        run: |
+          set -eux
+          sh -n install.sh
+          sh -n package/openrung-client/openrung-client-wrapper
+          sh -n package/openrung-client/openrung.init
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison g++ gawk gettext git \
+            libncurses-dev libssl-dev python3 python3-setuptools rsync unzip zlib1g-dev \
+            file wget zstd binutils
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.5'
+          cache: false
+
+      - name: Download and verify official OpenWrt 24.10.8 SDK
+        env:
+          TARGET: ${{ matrix.target }}
+          RELEASE: 24.10.8
+        run: |
+          set -eux
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.request import urlopen, urlretrieve
+          import hashlib, os, subprocess
+
+          target = os.environ["TARGET"]
+          release = os.environ["RELEASE"]
+          base = f"https://downloads.openwrt.org/releases/{release}/targets/{target}/"
+
+          class Links(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.links = []
+              def handle_starttag(self, tag, attrs):
+                  if tag == "a":
+                      href = dict(attrs).get("href", "")
+                      if href.startswith("openwrt-sdk-") and href.endswith((".tar.zst", ".tar.xz")):
+                          self.links.append(href)
+
+          parser = Links()
+          parser.feed(urlopen(base, timeout=30).read().decode("utf-8"))
+          if len(parser.links) != 1:
+              raise SystemExit(f"Expected exactly one official SDK for {target}; found {parser.links}")
+          sdk = parser.links[0]
+          sums = urlopen(base + "sha256sums", timeout=30).read().decode("utf-8")
+          matches = []
+          for line in sums.splitlines():
+              fields = line.split()
+              if len(fields) >= 2 and fields[-1].lstrip("*").removeprefix("./") == sdk:
+                  matches.append(fields[0])
+          if len(matches) != 1:
+              raise SystemExit(f"Official SHA256 entry missing or ambiguous for {sdk}")
+          archive = Path("/tmp") / sdk
+          urlretrieve(base + sdk, archive)
+          digest = hashlib.sha256()
+          with archive.open("rb") as stream:
+              for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                  digest.update(chunk)
+          actual = digest.hexdigest()
+          if actual != matches[0]:
+              raise SystemExit(f"SDK SHA256 mismatch: expected {matches[0]}, got {actual}")
+          print(f"Verified official SDK: {sdk} ({actual})")
+
+          sdk_dir = Path(os.environ["RUNNER_TEMP"]) / "openwrt-sdk"
+          sdk_dir.mkdir(parents=True, exist_ok=True)
+          if sdk.endswith(".tar.zst"):
+              command = ["tar", "--zstd", "-xf", str(archive), "-C", str(sdk_dir), "--strip-components=1"]
+          else:
+              command = ["tar", "-xJf", str(archive), "-C", str(sdk_dir), "--strip-components=1"]
+          subprocess.run(command, check=True)
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write(f"SDK_DIR={sdk_dir}\n")
+          PY
+
+      - name: Build OpenRung client for target ABI
+        env:
+          INPUT_REF: ${{ inputs.openrung_ref }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm || '' }}
+          GOMIPS: ${{ matrix.gomips || '' }}
+          GOMIPS64: ${{ matrix.gomips64 || '' }}
+        run: |
+          set -eux
+          REF="${INPUT_REF:-main}"
+          git clone --filter=blob:none https://github.com/openrung/openrung.git upstream
+          git -C upstream fetch --depth 1 origin "$REF"
+          git -C upstream checkout --detach FETCH_HEAD
+          echo "OPENRUNG_COMMIT=$(git -C upstream rev-parse HEAD)" >> "$GITHUB_ENV"
+          cd upstream
+          go mod vendor
+          test -s vendor/modules.txt
+          LICENSE_DIR="$GITHUB_WORKSPACE/third-party-licenses"
+          mkdir -p "$LICENSE_DIR"
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          vendor = Path("vendor")
+          destination = Path("../third-party-licenses")
+          count = 0
+          for source in vendor.rglob("*"):
+              if source.is_file() and source.name.lower().startswith(("license", "copying", "notice")):
+                  target = destination / source.relative_to(vendor)
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(source, target)
+                  count += 1
+          if count == 0:
+              raise SystemExit("No vendored license/notice files found")
+          print(f"Collected {count} license/notice files")
+          PY
+          CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" GOARM="$GOARM" GOMIPS="$GOMIPS" GOMIPS64="$GOMIPS64" \
+            go build -mod=vendor -trimpath -tags 'with_utls,with_external_windivert' \
+            -ldflags='-s -w' -o ../openrung-client.bin ./cmd/client
+          file ../openrung-client.bin
+          test -s ../openrung-client.bin
+
+      - name: Build native IPK packages using target SDK
+        env:
+          TARGET_NAME: ${{ matrix.name }}
+        run: |
+          set -eux
+          SDK="$SDK_DIR"
+          mkdir -p "$SDK/package/openrung-client/files"
+          cp package/openrung-client/openrung-client-wrapper \
+            package/openrung-client/openrung.config package/openrung-client/openrung.init \
+            "$SDK/package/openrung-client/files/"
+          cp openrung-client.bin "$SDK/package/openrung-client/files/openrung-client.bin"
+          cp upstream/LICENSE upstream/THIRD_PARTY_NOTICES.md \
+            "$SDK/package/openrung-client/files/"
+          cp COPYRIGHT.md "$SDK/package/openrung-client/files/COPYRIGHT.md"
+          mkdir -p "$SDK/package/openrung-client/files/licenses/third-party"
+          cp -a third-party-licenses/. "$SDK/package/openrung-client/files/licenses/third-party/"
+          cp package/openrung-client/Makefile "$SDK/package/openrung-client/Makefile"
+          cp -a package/luci-app-openrung "$SDK/package/"
+          cp LICENSE COPYRIGHT.md DISTRIBUTION-NOTICE-ADDENDUM.md "$SDK/"
+          cd "$SDK"
+          make defconfig
+          if grep -q '^CONFIG_USE_APK=y' .config; then
+            echo "24.10 SDK unexpectedly selected APK backend" >&2
+            exit 1
+          fi
+          make package/openrung-client/compile package/luci-app-openrung/compile -j"$(nproc)" V=s
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          find bin/packages -type f -name 'openrung-client*.ipk' -exec cp -v {} "$GITHUB_WORKSPACE/dist/" \;
+          find bin/packages -type f -name 'luci-app-openrung*.ipk' -exec cp -v {} "$GITHUB_WORKSPACE/dist/" \;
+          cd "$GITHUB_WORKSPACE"
+          CLIENT="$(find dist -maxdepth 1 -name 'openrung-client*.ipk' -print -quit)"
+          LUCI="$(find dist -maxdepth 1 -name 'luci-app-openrung*.ipk' -print -quit)"
+          test -n "$CLIENT" && test -n "$LUCI"
+          mv "$CLIENT" "dist/openrung-client-$TARGET_NAME.ipk"
+          mv "$LUCI" "dist/luci-app-openrung-$TARGET_NAME.ipk"
+          (cd dist && sha256sum *.ipk > SHA256SUMS)
+          (cd dist && for file in *.ipk; do sha256sum "$file" > "$file.sha256"; done)
+          printf 'OpenWrt release: 24.10.8\nTarget: %s\nOpenRung commit: %s\n' \
+            '${{ matrix.target }}' "$OPENRUNG_COMMIT" > dist/BUILD-INFO.txt
+          ls -lh dist
+
+      - name: Verify IPK payloads and target ELF ABI
+        env:
+          EXPECT_CLASS: ${{ matrix.elf_class }}
+          EXPECT_DATA: ${{ matrix.elf_data }}
+        run: |
+          set -eux
+          CLIENT_IPK="$(find dist -maxdepth 1 -name 'openrung-client-*.ipk' -print -quit)"
+          LUCI_IPK="$(find dist -maxdepth 1 -name 'luci-app-openrung-*.ipk' -print -quit)"
+          test -s "$CLIENT_IPK" && test -s "$LUCI_IPK"
+          mkdir -p "$RUNNER_TEMP/ipk-check" "$RUNNER_TEMP/ipk-check/client"
+          OUTER="$RUNNER_TEMP/ipk-check/outer"
+          mkdir -p "$OUTER"
+          if ar t "$CLIENT_IPK" >/dev/null 2>&1; then
+            (cd "$OUTER" && ar x "$GITHUB_WORKSPACE/$CLIENT_IPK")
+          else
+            tar -xzf "$CLIENT_IPK" -C "$OUTER"
+          fi
+          test -s "$OUTER/debian-binary"
+          test -s "$OUTER/data.tar.gz"
+          test -s "$OUTER/control.tar.gz"
+          tar -xzf "$OUTER/data.tar.gz" -C "$RUNNER_TEMP/ipk-check/client"
+          test -s "$RUNNER_TEMP/ipk-check/client/usr/libexec/openrung-client.bin"
+          test -s "$RUNNER_TEMP/ipk-check/client/etc/init.d/openrung"
+          file "$RUNNER_TEMP/ipk-check/client/usr/libexec/openrung-client.bin"
+          readelf -h "$RUNNER_TEMP/ipk-check/client/usr/libexec/openrung-client.bin" | tee "$RUNNER_TEMP/elf-header.txt"
+          grep -q "Class:.*$EXPECT_CLASS" "$RUNNER_TEMP/elf-header.txt"
+          case "$EXPECT_DATA" in
+            little) grep -q 'Data:.*little endian' "$RUNNER_TEMP/elf-header.txt" ;;
+            big) grep -q 'Data:.*big endian' "$RUNNER_TEMP/elf-header.txt" ;;
+          esac
+          file "$LUCI_IPK"
+          mkdir -p "$RUNNER_TEMP/ipk-check/luci"
+          LUCI_OUTER="$RUNNER_TEMP/ipk-check/luci-outer"
+          mkdir -p "$LUCI_OUTER"
+          if ar t "$LUCI_IPK" >/dev/null 2>&1; then
+            (cd "$LUCI_OUTER" && ar x "$GITHUB_WORKSPACE/$LUCI_IPK")
+          else
+            tar -xzf "$LUCI_IPK" -C "$LUCI_OUTER"
+          fi
+          test -s "$LUCI_OUTER/data.tar.gz"
+          tar -xzf "$LUCI_OUTER/data.tar.gz" -C "$RUNNER_TEMP/ipk-check/luci"
+          test -s "$RUNNER_TEMP/ipk-check/luci/usr/share/licenses/luci-app-openrung/LICENSE"
+                    echo "IPK archive, payload and ELF class/endianness checks passed. Device runtime testing remains required."
+          (cd dist && sha256sum -c SHA256SUMS)
+          echo "IPK archive, payload and ELF class/endianness checks passed. Device runtime testing remains required."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openrung-openwrt-24.10-${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+  summary:
+    if: always()
+    needs: sdk
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Report
+        env:
+          RESULT: ${{ needs.sdk.result }}
+        run: |
+          echo "OpenWrt 24.10 SDK IPK matrix: $RESULT"
+          echo "Artifacts are build/test outputs only; formal Releases are not modified."
+          test "$RESULT" = success

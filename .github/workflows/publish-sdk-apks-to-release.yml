@@ -1,10 +1,12 @@
-name: Publish verified SDK APKs to existing Release
+name: Retired legacy SDK APK publisher (disabled)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/publish-sdk-apks-to-release.yml'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to append assets to (must be explicitly selected)
+        required: true
+        type: string
 
 permissions:
   actions: read
@@ -12,6 +14,7 @@ permissions:
 
 jobs:
   publish:
+    if: false # Replaced by publish-multiarch-release.yml; this legacy job used a stale run ID and the old release tag.
     runs-on: ubuntu-24.04
     steps:
       - name: Download successful SDK matrix artifacts

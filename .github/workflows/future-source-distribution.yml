@@ -11,6 +11,11 @@ on:
         description: "ID of a successful OpenWrt IPK build run on main"
         required: true
         type: string
+      publish_release:
+        description: "将对应源码写入正式 Release（默认关闭）"
+        required: false
+        type: boolean
+        default: false
       packaging_commit:
         description: "Optional expected packaging commit SHA (leave empty to use the build run's exact commit)"
         required: false
@@ -324,6 +329,7 @@ jobs:
           echo "bundle=${BUNDLE}" >> "${GITHUB_OUTPUT}"
 
       - name: Publish matching source bundle to the unified GitHub Release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release == true }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}

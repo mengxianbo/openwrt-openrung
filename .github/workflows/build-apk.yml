@@ -7,6 +7,11 @@ on:
         description: "Official OpenRung client git ref (tag, branch or commit)"
         required: true
         default: "main"
+      publish_release:
+        description: "仅在确认后更新正式 Release（默认关闭）"
+        required: false
+        type: boolean
+        default: false
   push:
     paths:
       - "package/openrung-client/**"
@@ -32,6 +37,13 @@ jobs:
     steps:
       - name: Checkout packaging repository
         uses: actions/checkout@v4
+
+      - name: Validate installer and init shell syntax
+        run: |
+          set -eux
+          sh -n install.sh
+          sh -n package/openrung-client/openrung-client-wrapper
+          sh -n package/openrung-client/openrung.init
 
       - name: Install build dependencies
         run: |
@@ -336,6 +348,7 @@ jobs:
           retention-days: 30
 
       - name: Remove obsolete release assets and old releases
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release == true }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -377,6 +390,7 @@ jobs:
           done
 
       - name: Publish GitHub Release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release == true }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: openwrt-packages
