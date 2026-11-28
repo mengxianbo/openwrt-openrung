@@ -18,6 +18,14 @@
 
 许可证审计针对每次 APK/IPK 构建所使用的精确 OpenRung 上游提交运行。自动检查阻断禁止及未知许可证；GPL 等 copyleft/Restricted 分类不会被一概视为不兼容，而是需要结合具体许可证、上游声明和对应源码人工复核。客户端和 LuCI 安装包会携带项目版权说明及适用的许可证/第三方声明。审计范围和限制见 [DEPENDENCY-LICENSE-AUDIT.md](./DEPENDENCY-LICENSE-AUDIT.md) 与 [LICENSES.md](./LICENSES.md)。
 
+## 多架构构建进度（实验阶段）
+
+新增 GitHub Actions 工作流：[OpenRung multi-architecture compatibility builds](./.github/workflows/build-architecture-matrix.yml)。该工作流尝试为 Linux amd64、arm64、armv7、mips、mipsel、mips64、mips64el、riscv64 构建上游客户端，并将每种架构的测试二进制作为独立 Actions artifact 保存 30 天。
+
+**重要：这不是多架构 OpenWrt 安装包发布。** 当前工作流只构建客户端二进制，不生成对应目标的 APK/IPK，不修改统一 Release，也不改变现有正式版。各架构必须等工作流实际构建通过，再进一步接入对应 OpenWrt SDK/target、生成包、核对依赖与 ABI，并在真实设备或虚拟机中验证 procd、LuCI、代理监听及运行行为后，才能标记为正式支持。当前一键安装器仍只接受现有 Release 的 x86_64 核心包。
+
+工作流可在 GitHub Actions 页面手动运行，选择 OpenRung 上游 ref。PR 变更也会触发构建检查。
+
 ## 当前实现
 
 - `openrung-client`：从官方 OpenRung 源码编译的 Linux amd64 CLI。
