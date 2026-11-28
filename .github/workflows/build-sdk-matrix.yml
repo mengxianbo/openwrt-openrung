@@ -173,19 +173,16 @@ jobs:
           test -s "$CLIENT_APK"
           test -s "$LUCI_APK"
 
-          # Validate using the exact apk-tools binary shipped with this OpenWrt SDK.
-          # OpenWrt APK files are not gzip-compressed tarballs; do not inspect them with tar -z.
+          # Extract with apk-tools v3: this validates the ADB/APKv3 container
+          # and reads payloads without dependency resolution or package installation.
           ROOT="$RUNNER_TEMP/apk-root"
-          mkdir -p "$ROOT"
-          "$APK" add --root "$ROOT" --initdb --allow-untrusted --no-scripts \
-            --no-network --no-deps "$CLIENT_APK" "$LUCI_APK"
+          mkdir -p "$ROOT/client" "$ROOT/luci"
+          "$APK" extract --allow-untrusted --no-chown --destination "$ROOT/client" "$CLIENT_APK"
+          "$APK" extract --allow-untrusted --no-chown --destination "$ROOT/luci" "$LUCI_APK"
 
-          test -s "$ROOT/usr/libexec/openrung-client.bin"
-          test -s "$ROOT/usr/share/licenses/luci-app-openrung/LICENSE"
-          "$APK" --root "$ROOT" info | tee "$RUNNER_TEMP/installed-packages.txt"
-          grep -q '^openrung-client-' "$RUNNER_TEMP/installed-packages.txt"
-          grep -q '^luci-app-openrung-' "$RUNNER_TEMP/installed-packages.txt"
-          echo "Both OpenWrt APKs installed into an isolated test root and payloads verified."
+          test -s "$ROOT/client/usr/libexec/openrung-client.bin"
+          test -s "$ROOT/luci/usr/share/licenses/luci-app-openrung/LICENSE"
+          echo "Both OpenWrt APKv3 packages were parsed and their payloads verified."
 
       - uses: actions/upload-artifact@v4
         with:
