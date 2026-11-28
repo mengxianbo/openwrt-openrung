@@ -25,6 +25,7 @@ on:
       - ".github/workflows/build.yml"
 
 permissions:
+  actions: read
   contents: write
 
 # Serialize package publication so APK and IPK workflows update one unified Release safely.
@@ -473,6 +474,27 @@ jobs:
             out/*-source-*.tar.gz
           if-no-files-found: error
           retention-days: 30
+
+      - name: Restore original x86_64 IPK assets to the legacy Release (one-time recovery)
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/multi-arch-openwrt-packages' && github.event.head_commit.message == 'Restore original x86_64 IPK assets' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO/actions/runs/46136876423" > original-run.json
+          jq -e '.head_branch == "main" and .head_sha == "f3c9bbcac260985a8d0c5be92cfe1e4e63918de7" and .conclusion == "success"' original-run.json >/dev/null
+          mkdir -p restore
+          gh run download 46136876423 --repo "$GH_REPO" --pattern openrung-openwrt-ipk --dir restore
+          CLIENT="$(find restore -type f -name openrung-client_x86_64.ipk -print -quit)"
+          LUCI="$(find restore -type f -name luci-app-openrung_all.ipk -print -quit)"
+          SUMS="$(find restore -type f -name IPK-SHA256SUMS -print -quit)"
+          ZIP="$(find restore -type f -name openrung-ipk.zip -print -quit)"
+          test -s "$CLIENT" && test -s "$LUCI" && test -s "$SUMS" && test -s "$ZIP"
+          ROOT="$(dirname "$CLIENT")"
+          (cd "$ROOT" && sha256sum -c IPK-SHA256SUMS)
+          gh release upload openwrt-packages "$CLIENT" "$LUCI" "$SUMS" "$ZIP" --repo "$GH_REPO" --clobber
+          echo "Restored the original x86_64 IPK assets from the last successful main-branch build."
 
       - name: Remove obsolete release assets and old releases (IPK workflow)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release == true }}
