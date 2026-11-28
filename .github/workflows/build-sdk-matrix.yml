@@ -131,7 +131,7 @@ jobs:
           os.makedirs(os.environ["RUNNER_TEMP"] + "/sdk", exist_ok=True)
           subprocess.run(["tar", "--zstd", "-xf", str(archive), "-C", os.environ["RUNNER_TEMP"] + "/sdk", "--strip-components=1"], check=True)
           with open(os.environ["GITHUB_ENV"], "a") as env:
-              env.write(f"SDK_DIR={os.environ['RUNNER_TEMP']}/sdk\\n")
+              env.write(f"SDK_DIR={os.environ['RUNNER_TEMP']}/sdk\n")
           PY
 
       - name: Build OpenRung client for target ABI
