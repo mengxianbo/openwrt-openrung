@@ -53,6 +53,10 @@ jobs:
             target: malta/be
             goarch: mips
             gomips: softfloat
+          - name: mips-ath79-generic
+            target: ath79/generic
+            goarch: mips
+            gomips: softfloat
           - name: mipsel-malta-le
             target: malta/le
             goarch: mipsle
@@ -61,6 +65,10 @@ jobs:
             target: malta/le64
             goarch: mips64le
             gomips64: softfloat
+          - name: mips64-octeon
+            target: octeon/generic
+            goarch: mips64
+            gomips64: hardfloat
           - name: riscv64-sifiveu
             target: sifiveu/generic
             goarch: riscv64
