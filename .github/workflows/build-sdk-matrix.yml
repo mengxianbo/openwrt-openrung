@@ -16,18 +16,12 @@ on:
       - 'COPYRIGHT.md'
       - 'LICENSE'
       - 'THIRD_PARTY_NOTICES.md'
-  pull_request:
-    paths:
-      - '.github/workflows/build-sdk-matrix.yml'
-      - 'package/openrung-client/**'
-      - 'package/luci-app-openrung/**'
-      - 'DISTRIBUTION-NOTICE-ADDENDUM.md'
-      - 'COPYRIGHT.md'
-      - 'LICENSE'
-      - 'THIRD_PARTY_NOTICES.md'
-
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   sdk:
