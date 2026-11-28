@@ -125,8 +125,19 @@ jobs:
             --pattern 'luci-app-openrung_all.apk' \
             --pattern 'openrung-client_x86_64.ipk' \
             --pattern 'luci-app-openrung_all.ipk' \
+            --pattern 'openrung-corresponding-source-*.tar.gz' \
+            --pattern 'openrung-corresponding-source-*.tar.gz.sha256' \
+            --pattern 'OPENRUNG-UPSTREAM-LICENSE' \
+            --pattern 'PACKAGING-LICENSE' \
+            --pattern 'SOURCE-INFO.txt' \
             --dir artifacts/x86
-          test "$(find artifacts/x86 -maxdepth 1 -type f | wc -l)" -eq 4
+          test -s artifacts/x86/openrung-client_x86_64.apk
+          test -s artifacts/x86/luci-app-openrung_all.apk
+          test -s artifacts/x86/openrung-client_x86_64.ipk
+          test -s artifacts/x86/luci-app-openrung_all.ipk
+          for sum in artifacts/x86/openrung-corresponding-source-*.tar.gz.sha256; do
+            (cd artifacts/x86 && sha256sum -c "$(basename "$sum")")
+          done
 
       - name: Assemble and verify independent multi-architecture Release
         id: assemble
@@ -262,7 +273,7 @@ jobs:
             find . -type f -printf '%P\n' | sort | xargs -r sha256sum > SHA256SUMS-SOURCE
             sha256sum SHA256SUMS-SOURCE > SHA256SUMS-SOURCE.sha256
           )
-          BUNDLE="openrung-corresponding-source-$UPSTREAM_COMMIT.tar.gz"
+          BUNDLE="openrung-corresponding-source-multiarch-$UPSTREAM_COMMIT.tar.gz"
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf "dist/$BUNDLE" -C source-bundle .
           (cd dist && sha256sum "$BUNDLE" > "$BUNDLE.sha256" && sha256sum -c "$BUNDLE.sha256")
           tar -tzf "dist/$BUNDLE" >/dev/null
@@ -272,7 +283,7 @@ jobs:
         if: ${{ steps.runs.outputs.ready == 'true' }}
         run: |
           set -euo pipefail
-          BUNDLE="$(find dist -maxdepth 1 -type f -name 'openrung-corresponding-source-*.tar.gz' -print -quit)"
+          BUNDLE="$(find dist -maxdepth 1 -type f -name 'openrung-corresponding-source-multiarch-*.tar.gz' -print -quit)"
           test -s "$BUNDLE"
           echo "Corresponding source archive: $(basename "$BUNDLE")" >> dist/BUILD-MANIFEST.txt
           (
