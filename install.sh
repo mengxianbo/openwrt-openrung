@@ -65,8 +65,8 @@ fetch "$BASE/$LUCI" "$LUCI"
 fetch "$BASE/$SUMS" "$SUMS"
 
 say "验证 SHA256"
-grep -E "[[:space:]]*?($CLIENT|$LUCI)$" "$SUMS" >/dev/null 2>&1 || die "校验文件中没有对应安装包条目，停止安装。"
-sha256sum -c "$SUMS" 2>/dev/null | grep -E "^($CLIENT|$LUCI): OK$" >/dev/null || die "SHA256 校验失败，停止安装。"
+grep -E "[[:space:]]+[*]?($CLIENT|$LUCI)$" "$SUMS" >/dev/null 2>&1 || die "校验文件中没有对应安装包条目，停止安装。"
+sha256sum -c "$SUMS" >/dev/null 2>&1 || die "SHA256 校验失败，停止安装。"
 
 say "检查临时目录空间"
 df -k "$WORK" | tail -1
