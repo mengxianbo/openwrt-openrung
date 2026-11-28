@@ -1,0 +1,41 @@
+name: Cancel redundant feature-branch build queue (one-time)
+
+on:
+  push:
+    branches:
+      - feat/multi-arch-openwrt-packages
+    paths:
+      - '.github/workflows/cleanup-duplicate-runs.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Cancel obsolete queued matrix runs and keep final validation runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          CURRENT_RUN: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/actions/runs?branch=feat%2Fmulti-arch-openwrt-packages&per_page=100" > runs.json
+          KEEP_IDS="46140328370 46140331144 46140078346 46140333062"
+          mapfile -t CANCEL_IDS < <(
+            jq -r --arg current "$CURRENT_RUN" '.workflow_runs[]
+              | select((.status == "queued" or .status == "in_progress") and ((.id|tostring) != $current))
+              | .id' runs.json
+          )
+          for id in "${CANCEL_IDS[@]}"; do
+            case " $KEEP_IDS " in
+              *" $id "*) echo "Keeping required run $id" ;;
+              *)
+                echo "Cancelling redundant run $id"
+                gh api --method POST "repos/$REPO/actions/runs/$id/cancel" >/dev/null || true
+                ;;
+            esac
+          done
+          echo "Kept final APK matrix, IPK matrix, legacy IPK restoration and latest license audit."
