@@ -196,7 +196,7 @@ jobs:
             sha256sum -c IPK-SHA256SUMS
           )
 
-          cp LICENSE COPYRIGHT.md THIRD_PARTY_NOTICES.md DISTRIBUTION-NOTICE-ADDENDUM.md dist/
+          cp install.sh LICENSE COPYRIGHT.md THIRD_PARTY_NOTICES.md DISTRIBUTION-NOTICE-ADDENDUM.md dist/
           cat > dist/BUILD-MANIFEST.txt <<EOF
           OpenRung multi-architecture OpenWrt package release
           Packaging repository: https://github.com/${GITHUB_REPOSITORY}
