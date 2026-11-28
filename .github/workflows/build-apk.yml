@@ -38,6 +38,13 @@ jobs:
       - name: Checkout packaging repository
         uses: actions/checkout@v4
 
+      - name: Validate installer and init shell syntax
+        run: |
+          set -eux
+          sh -n install.sh
+          sh -n package/openrung-client/openrung-client-wrapper
+          sh -n package/openrung-client/openrung.init
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
